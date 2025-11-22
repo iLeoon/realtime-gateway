@@ -1,0 +1,31 @@
+package tcpserver
+
+import (
+	"fmt"
+	"net"
+
+	"github.com/iLeoon/chatserver/internal/config"
+)
+
+func ExeServer() {
+	conf := config.Load()
+	listen, err := net.Listen("tcp", conf.TCPServer.Port)
+
+	fmt.Println("The server is running and waiting for connections")
+
+	if err != nil {
+		panic("Can't listen to the server")
+	}
+	for {
+		conn, err := listen.Accept()
+		if err != nil {
+			panic("Can't listen to the server")
+		}
+		go handleconn(conn)
+	}
+}
+
+func handleconn(conn net.Conn) {
+	defer conn.Close()
+	fmt.Println(conn)
+}

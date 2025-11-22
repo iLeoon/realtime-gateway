@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"github.com/iLeoon/chatserver/internal/tcpserver"
+)
 
 func main() {
-	fmt.Println("Hello world")
+	tcpserver.ExeServer()
 }
