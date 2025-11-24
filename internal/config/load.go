@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-//loads the config variables
+//load the config variables
 
 func Load() *Config {
 
@@ -16,6 +16,7 @@ func Load() *Config {
 
 	c := &Config{}
 	c.TCPServer.Port = getEnv("TCP_SERVER_PORT")
+	c.Websocket.Port = getEnv("WEBSOKCET_SERVER_PORT")
 
 	return c
 }
