@@ -7,6 +7,13 @@ import (
 	"github.com/iLeoon/chatserver/internal/config"
 )
 
+type TCPServer interface {
+	Run()
+}
+
+type tcpServer struct {
+}
+
 func ExeServer(conf *config.Config) {
 	listen, err := net.Listen("tcp", conf.TCPServer.Port)
 

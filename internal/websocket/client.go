@@ -24,13 +24,18 @@ const (
 // The WebSocket connection can only be written to from ONE goroutine.
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
-type NewClient struct {
-	conn *websocket.Conn
-	tcp  *net.Conn
-	send chan []byte
+type Client struct {
+	conn   *websocket.Conn
+	tcp    *net.Conn
+	send   chan []byte
+	server *server
 }
 
-func (c *NewClient) readPump() {
+func (c *Client) readPump() {
+	defer func() {
+		c.server.unregister <- c
+		c.conn.Close()
+	}()
 	defer c.conn.Close()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -51,7 +56,7 @@ func (c *NewClient) readPump() {
 
 }
 
-func (c *NewClient) writePump() {
+func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
