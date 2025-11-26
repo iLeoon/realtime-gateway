@@ -7,8 +7,7 @@ import (
 	"github.com/iLeoon/chatserver/internal/config"
 )
 
-func ExeServer() {
-	conf := config.Load()
+func ExeServer(conf *config.Config) {
 	listen, err := net.Listen("tcp", conf.TCPServer.Port)
 
 	fmt.Println("The server is running and waiting for connections")

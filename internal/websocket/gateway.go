@@ -7,8 +7,7 @@ import (
 	"github.com/iLeoon/chatserver/internal/config"
 )
 
-func Start() {
-	conf := config.Load()
+func Start(conf *config.Config) {
 
 	http.HandleFunc("/ws", wsServer)
 	log.Println("The websocekt server is up and running..")

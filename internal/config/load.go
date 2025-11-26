@@ -2,38 +2,42 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
-	"github.com/iLeoon/chatserver/pkg/logger"
 	"github.com/joho/godotenv"
 )
 
-// load the config variables
+// the entry point for all the config variables
 var (
 	ErrLoadEnvFile = errors.New("can't find the env file")
 	ErrRetriveKey  = errors.New("no key with that name exists")
 )
 
-func Load() *Config {
+func Load() (*Config, error) {
 
-	err := godotenv.Load()
+	err := godotenv.Load(".env")
 	if err != nil {
-		panic("An Error while trying to get the env file")
+		return nil, fmt.Errorf("%w:%v", ErrLoadEnvFile, err)
 	}
-
-	logger.Info("Loaded the env file")
 
 	c := &Config{}
-	c.TCPServer.Port = getEnv("TCP_SERVER_PORT")
-	c.Websocket.Port = getEnv("WEBSOKCET_SERVER_PORT")
+	c.TCPServer.Port, err = getEnv("TCP_SERVER_PORT")
+	if err != nil {
+		return nil, err
+	}
 
-	return c
+	c.Websocket.Port, err = getEnv("WEBSOKCET_SERVR_PORT")
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
-func getEnv(key string) string {
+func getEnv(key string) (string, error) {
 
 	if val, exists := os.LookupEnv(key); exists {
-		return val
+		return val, nil
 	}
-	panic("An Error while trying to load the env")
+	return "", fmt.Errorf("%w:%v", ErrRetriveKey, key)
 }
