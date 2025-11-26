@@ -2,9 +2,11 @@ package websocket
 
 import (
 	"fmt"
-	"github.com/gorilla/websocket"
-	"log"
+	"net"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/iLeoon/chatserver/pkg/logger"
 )
 
 // WebSocket timing configuration.
@@ -22,12 +24,13 @@ const (
 // The WebSocket connection can only be written to from ONE goroutine.
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
-type Client struct {
+type NewClient struct {
 	conn *websocket.Conn
+	tcp  *net.Conn
 	send chan []byte
 }
 
-func (c *Client) readPump() {
+func (c *NewClient) readPump() {
 	defer c.conn.Close()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -35,11 +38,49 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			log.Println("read websocket error:", err)
+			if websocket.IsUnexpectedCloseError(err) {
+
+				logger.Error("error on incoming message from the client", "Error", err)
+			}
 			break
 		}
 
 		fmt.Println(string(message))
 
 	}
+
+}
+
+func (c *NewClient) writePump() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-c.send:
+			fmt.Println(ok)
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			msg, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+
+				logger.Error("An error while tring to write the message", "Error", err)
+			}
+			fmt.Println(string(message))
+			msg.Write(message)
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+
 }

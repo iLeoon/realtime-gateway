@@ -27,7 +27,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	c.Websocket.Port, err = getEnv("WEBSOKCET_SERVR_PORT")
+	c.Websocket.Port, err = getEnv("WEBSOKCET_SERVER_PORT")
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+// A global variable exposes the API surface for slog
 var logger *slog.Logger
 
 func Initlogger() {

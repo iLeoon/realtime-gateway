@@ -1,10 +1,10 @@
 package websocket
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/iLeoon/chatserver/pkg/logger"
 )
 
 //Upgrading the http protocol into a websocket protocol
@@ -19,11 +19,14 @@ func wsServer(w http.ResponseWriter, r *http.Request) {
 	//the actual websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal("An Error occured while trying to upgrade connectin")
+		logger.Error("error on upgrading raw tcp connection into websocekt", "Error", err)
+		return
 	}
 
-	client := &Client{conn: conn, send: make(chan []byte, 256)}
+	client := &NewClient{conn: conn, send: make(chan []byte, 256)}
+	logger.Info("A new client has been connected to the server")
 
 	go client.readPump()
+	go client.writePump()
 
 }
