@@ -5,16 +5,17 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/session"
 )
 
-type server struct {
+type wsServer struct {
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
 }
 
-func newServer() *server {
-	return &server{
+func newWsServer() *wsServer {
+	return &wsServer{
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -28,7 +29,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func wsServer(s *server, w http.ResponseWriter, r *http.Request) {
+func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session.Session) {
 	//the actual websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -36,7 +37,7 @@ func wsServer(s *server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &Client{conn: conn, send: make(chan []byte, 256), server: s}
+	client := &Client{conn: conn, send: make(chan []byte, 256), server: s, transporter: tcp}
 	client.server.register <- client
 	logger.Info("A new client has been connected to the server")
 	go client.readPump()

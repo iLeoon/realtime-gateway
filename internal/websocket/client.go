@@ -2,11 +2,11 @@ package websocket
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/session"
 )
 
 // WebSocket timing configuration.
@@ -25,10 +25,11 @@ const (
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
 type Client struct {
-	conn   *websocket.Conn
-	tcp    *net.Conn
-	send   chan []byte
-	server *server
+	conn         *websocket.Conn
+	send         chan []byte
+	server       *wsServer
+	transporter  session.Session
+	connectionID uint32
 }
 
 func (c *Client) readPump() {
@@ -49,6 +50,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
+		c.transporter.ReadFromGateway(message)
 
 		fmt.Println(string(message))
 
@@ -80,6 +82,7 @@ func (c *Client) writePump() {
 			}
 			fmt.Println(string(message))
 			msg.Write(message)
+
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {

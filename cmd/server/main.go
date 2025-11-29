@@ -1,8 +1,8 @@
 package main
 
 import (
-	// "github.com/iLeoon/chatserver/internal/tcpserver"
 	"github.com/iLeoon/chatserver/internal/config"
+	"github.com/iLeoon/chatserver/internal/tcp"
 	"github.com/iLeoon/chatserver/internal/websocket"
 	"github.com/iLeoon/chatserver/pkg/logger"
 )
@@ -15,5 +15,8 @@ func main() {
 		logger.Error("can't load configuration", "Error", err)
 		panic(err)
 	}
-	websocket.Start(conf)
+	go tcp.Server(conf)
+	tcpClient := tcp.NewTCPClient(conf)
+	websocket.Start(conf, tcpClient)
+
 }

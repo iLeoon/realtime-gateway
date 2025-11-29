@@ -5,13 +5,14 @@ import (
 
 	"github.com/iLeoon/chatserver/internal/config"
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/session"
 )
 
-func Start(conf *config.Config) {
-	server := newServer()
-	go server.run()
+func Start(conf *config.Config, tcp session.Session) {
+	ws := newWsServer()
+	go ws.run()
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		wsServer(server, w, r)
+		initServer(ws, w, r, tcp)
 	})
 
 	logger.Info("The websocekt server is up and running..")
@@ -20,7 +21,7 @@ func Start(conf *config.Config) {
 	logger.Error("Error while trying to listen to the websokcet server", "Error", err)
 }
 
-func (s *server) run() {
+func (s *wsServer) run() {
 	for {
 		select {
 		case client := <-s.register:
