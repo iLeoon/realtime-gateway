@@ -15,7 +15,7 @@ func main() {
 		logger.Error("can't load configuration", "Error", err)
 		panic(err)
 	}
-	go tcp.Server(conf)
+	go tcp.InitTCPServer(conf)
 	tcpClient := tcp.NewTCPClient(conf)
 	websocket.Start(conf, tcpClient)
 

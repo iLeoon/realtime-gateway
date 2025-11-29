@@ -11,7 +11,7 @@ import (
 type tcpServer struct {
 }
 
-func Server(conf *config.Config) {
+func InitTCPServer(conf *config.Config) {
 	conn, err := net.Listen("tcp", conf.TCPServer.Port)
 	if err != nil {
 		logger.Error("An error occured on creating tcp server", "Error", err)
