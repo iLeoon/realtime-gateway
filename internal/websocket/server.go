@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"math/rand"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -9,14 +10,14 @@ import (
 )
 
 type wsServer struct {
-	clients    map[*Client]bool
+	clients    map[*Client]uint32
 	register   chan *Client
 	unregister chan *Client
 }
 
 func newWsServer() *wsServer {
 	return &wsServer{
-		clients:    make(map[*Client]bool),
+		clients:    make(map[*Client]uint32),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -37,7 +38,14 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session
 		return
 	}
 
-	client := &Client{conn: conn, send: make(chan []byte, 256), server: s, transporter: tcp}
+	client := &Client{
+		conn:         conn,
+		send:         make(chan []byte, 256),
+		server:       s,
+		transporter:  tcp,
+		connectionID: rand.Uint32(),
+	}
+
 	client.server.register <- client
 	logger.Info("A new client has been connected to the server")
 	go client.readPump()

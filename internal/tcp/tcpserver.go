@@ -1,11 +1,14 @@
 package tcp
 
 import (
+	"fmt"
 	"net"
 	"os"
 
 	"github.com/iLeoon/chatserver/internal/config"
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/protcol"
+	"golang.org/x/text/cases"
 )
 
 type tcpServer struct {
@@ -27,11 +30,24 @@ func InitTCPServer(conf *config.Config) {
 			logger.Error("An error occured while trying to connect a client", "Error", err)
 		}
 
-		handleConn(client)
+		go handleConn(client)
 	}
 }
 
 func handleConn(conn net.Conn) {
 	defer conn.Close()
+
+	for {
+
+		frame, err := protcol.DecodeFrame(conn)
+		switch frame.Header.Opcode {
+		case protcol.SEND_MESSAGE:
+		}
+		if err != nil {
+			logger.Error("An Error when decoding")
+		}
+		fmt.Println(frame.Payload)
+
+	}
 
 }

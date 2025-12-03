@@ -50,10 +50,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.transporter.ReadFromGateway(message)
-
-		fmt.Println(string(message))
-
+		c.transporter.ReadFromGateway(message, c.connectionID)
 	}
 
 }

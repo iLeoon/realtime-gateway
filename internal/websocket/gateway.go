@@ -25,7 +25,7 @@ func (s *wsServer) run() {
 	for {
 		select {
 		case client := <-s.register:
-			s.clients[client] = true
+			s.clients[client] = client.connectionID
 		case client := <-s.unregister:
 			if _, ok := s.clients[client]; ok {
 				delete(s.clients, client)
