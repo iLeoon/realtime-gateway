@@ -25,12 +25,19 @@ func (s *wsServer) run() {
 	for {
 		select {
 		case client := <-s.register:
+			//Add the connectionID to the websocket map
 			s.clients[client] = client.connectionID
+			//Add the connectionID to the tcp server map
+			client.transporter.OnConnect(client.connectionID)
 		case client := <-s.unregister:
 			if _, ok := s.clients[client]; ok {
+				//Remove the connectionID from the websocket map
 				delete(s.clients, client)
+				//Close the channel
 				close(client.send)
 			}
+			//Remove the connectionID from the tcp server map
+			client.transporter.DisConnect(client.connectionID)
 		}
 	}
 }

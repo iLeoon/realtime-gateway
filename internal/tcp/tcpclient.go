@@ -7,6 +7,7 @@ import (
 	"github.com/iLeoon/chatserver/internal/config"
 	"github.com/iLeoon/chatserver/pkg/logger"
 	"github.com/iLeoon/chatserver/pkg/protcol"
+	"github.com/iLeoon/chatserver/pkg/protcol/packets"
 )
 
 type ClientPayload struct {
@@ -38,7 +39,7 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) {
 	case "send_message":
 		var data SendMessagePayload
 		json.Unmarshal(cp.Payload, &data)
-		pkt := &protcol.SendMessage{
+		pkt := &packets.SendMessage{
 			ConnectionID: connectionID,
 			Content:      data.Content,
 		}
@@ -50,4 +51,23 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) {
 
 	}
 
+}
+
+func (t *tcpClient) OnConnect(connectionID uint32) {
+	pkt := &packets.ConnectPacket{
+		ConnectionID: connectionID,
+	}
+
+	frame := protcol.ConstructFrame(pkt)
+	frame.EncodeFrame(t.conn)
+}
+
+func (t *tcpClient) DisConnect(connectionID uint32) {
+
+	pkt := &packets.DisconnectPacket{
+		ConnectionID: connectionID,
+	}
+
+	frame := protcol.ConstructFrame(pkt)
+	frame.EncodeFrame(t.conn)
 }

@@ -1,4 +1,4 @@
-package protcol
+package packets
 
 import (
 	"bytes"

@@ -2,9 +2,11 @@ package protcol
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/protcol/packets"
 )
 
 const (
@@ -12,20 +14,9 @@ const (
 	MaxPayloadLen uint32 = 1024
 )
 
-const (
-	SEND_MESSAGE = iota + 1
-	PING_MESSAGE
-)
-
-type BuildPayload interface {
-	Type() uint8
-	Encode() (error, []byte)
-	Decode([]byte) error
-}
-
 type Frame struct {
 	Header  FrameHeader
-	Payload BuildPayload
+	Payload packets.BuildPayload
 }
 
 type FrameHeader struct {
@@ -34,7 +25,7 @@ type FrameHeader struct {
 	Length uint32
 }
 
-func ConstructFrame(p BuildPayload) *Frame {
+func ConstructFrame(p packets.BuildPayload) *Frame {
 	return &Frame{
 		Header: FrameHeader{
 			Magic:  ProtcolMagic,
@@ -71,6 +62,7 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 	//Now we copy the payload slice into the rest of the frame
 	copy(frame[6:], payloadSlice)
 	//Write the frame into the tcp connection
+	fmt.Println("The encoded frame: ", frame)
 	w.Write(frame)
 	return nil
 }
@@ -94,7 +86,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	//We will create a slice to be able to get the actual payload
 	//To contrust the packet and build the struct payload
 	payload := make([]byte, payloadLength)
-	pkt := ConstructPacket(opcode)
+	pkt := packets.ConstructPacket(opcode)
 
 	_, PayloadErr := io.ReadFull(r, payload)
 	if PayloadErr != nil {
@@ -112,14 +104,4 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 		Payload: pkt,
 	}, nil
 
-}
-
-func ConstructPacket(op uint8) BuildPayload {
-	switch op {
-	case SEND_MESSAGE:
-		return &SendMessage{}
-	default:
-		logger.Error("This packet type does not exist")
-		return nil
-	}
 }

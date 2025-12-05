@@ -1,0 +1,9 @@
+package packets
+
+const (
+	SEND_MESSAGE = iota + 1
+	RESPONSE_MESSAGE
+	PING_MESSAGE
+	CONNECT
+	DISCONNECT
+)

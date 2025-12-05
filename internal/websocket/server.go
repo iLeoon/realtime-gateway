@@ -47,6 +47,7 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session
 	}
 
 	client.server.register <- client
+
 	logger.Info("A new client has been connected to the server")
 	go client.readPump()
 	go client.writePump()
