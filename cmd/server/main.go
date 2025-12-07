@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/iLeoon/chatserver/internal/config"
+	"github.com/iLeoon/chatserver/internal/router"
 	"github.com/iLeoon/chatserver/internal/tcp"
 	"github.com/iLeoon/chatserver/internal/websocket"
 	"github.com/iLeoon/chatserver/pkg/logger"
@@ -16,7 +17,9 @@ func main() {
 		panic(err)
 	}
 	go tcp.InitTCPServer(conf)
-	tcpClient := tcp.NewTCPClient(conf)
-	websocket.Start(conf, tcpClient)
+	wsServer := websocket.NewWsServer()
+	router := router.NewRouter(wsServer.Clients())
+	tcpClient := tcp.NewTCPClient(conf, router)
+	websocket.Start(wsServer, conf, tcpClient)
 
 }

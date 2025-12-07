@@ -2,6 +2,6 @@ package packets
 
 type BuildPayload interface {
 	Type() uint8
-	Encode() (error, []byte)
+	Encode() ([]byte, error)
 	Decode([]byte) error
 }

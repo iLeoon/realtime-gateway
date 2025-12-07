@@ -10,14 +10,14 @@ import (
 )
 
 type wsServer struct {
-	clients    map[*Client]uint32
+	clients    map[uint32]*Client
 	register   chan *Client
 	unregister chan *Client
 }
 
-func newWsServer() *wsServer {
+func NewWsServer() *wsServer {
 	return &wsServer{
-		clients:    make(map[*Client]uint32),
+		clients:    make(map[uint32]*Client),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -40,16 +40,41 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session
 
 	client := &Client{
 		conn:         conn,
-		send:         make(chan []byte, 256),
+		Send:         make(chan []byte, 256),
 		server:       s,
 		transporter:  tcp,
-		connectionID: rand.Uint32(),
+		ConnectionID: rand.Uint32(),
 	}
 
 	client.server.register <- client
-
 	logger.Info("A new client has been connected to the server")
 	go client.readPump()
 	go client.writePump()
 
+}
+
+func (s *wsServer) run() {
+	for {
+		select {
+		case client := <-s.register:
+			//Add the connectionID to the websocket map
+			s.clients[client.ConnectionID] = client
+			//Add the connectionID to the tcp server map
+			client.transporter.OnConnect(client.ConnectionID)
+		case client := <-s.unregister:
+			if _, ok := s.clients[client.ConnectionID]; ok {
+				//Remove the connectionID from the websocket map
+				delete(s.clients, client.ConnectionID)
+				//Remove the connectionID from the tcp server map
+				client.transporter.DisConnect(client.ConnectionID)
+				//Close the channel
+				close(client.Send)
+			}
+
+		}
+	}
+}
+
+func (s *wsServer) Clients() *map[uint32]*Client {
+	return &s.clients
 }

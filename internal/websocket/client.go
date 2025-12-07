@@ -26,10 +26,10 @@ const (
 // We funnel all outgoing messages into `client.send`.
 type Client struct {
 	conn         *websocket.Conn
-	send         chan []byte
+	Send         chan []byte
 	server       *wsServer
 	transporter  session.Session
-	connectionID uint32
+	ConnectionID uint32
 }
 
 func (c *Client) readPump() {
@@ -50,7 +50,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.transporter.ReadFromGateway(message, c.connectionID)
+		c.transporter.ReadFromGateway(message, c.ConnectionID)
 	}
 
 }
@@ -64,7 +64,7 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case message, ok := <-c.send:
+		case message, ok := <-c.Send:
 			fmt.Println(ok)
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
@@ -79,6 +79,10 @@ func (c *Client) writePump() {
 			}
 			fmt.Println(string(message))
 			msg.Write(message)
+			if err := msg.Close(); err != nil {
+				logger.Error("Failed to close writer", "Error", err)
+				return
+			}
 
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))

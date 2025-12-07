@@ -45,35 +45,48 @@ func InitTCPServer(conf *config.Config) {
 
 func (t *tcpServer) handleConn() {
 	defer t.conn.Close()
-
 	for {
 		frame, err := protcol.DecodeFrame(t.conn)
 		fmt.Println("The decoded frame: ", frame)
 		switch p := frame.Payload.(type) {
-		case *packets.SendMessage:
-			t.HandleSendMessageReq(p)
 		case *packets.ConnectPacket:
 			t.RegisterConnectionIDs(p)
 		case *packets.DisconnectPacket:
 			t.UnRegisterConnectionIDs(p)
+		case *packets.SendMessagePacket:
+			t.HandleSendMessageReq(p)
+
 		}
 		if err != nil {
 			logger.Error("An Error when decoding")
+			break
 		}
 
 	}
 
 }
 
-func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessage) {
+func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) {
 
-	// fmt.Sprintf("Data from send message packet; ConnectionID: %d, Content: %d", pkt.ConnectionID, pkt.Content)
-
-	//Construct the response message frame
-
-	for index, _ := range t.clients {
-		fmt.Println("The Map data", index)
+	//Construct the response message payload
+	var recipient uint32
+	for id, _ := range t.clients {
+		if id != pkt.ConnectionID {
+			recipient = id
+		}
 	}
+
+	resPkt := &packets.ResponseMessagePacket{
+		ToConnectionID: recipient,
+		ResContent:     pkt.Content,
+	}
+
+	fmt.Println("Recipients", recipient)
+
+	frame := protcol.ConstructFrame(resPkt)
+	fmt.Println("THe frame inside Handle send message", frame)
+	frame.EncodeFrame(t.conn)
+
 }
 
 func (t *tcpServer) RegisterConnectionIDs(pkt *packets.ConnectPacket) {

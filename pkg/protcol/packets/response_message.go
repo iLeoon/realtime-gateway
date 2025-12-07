@@ -3,52 +3,59 @@ package packets
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
 type ResponseMessagePacket struct {
-	FromConnectionID uint32
-	ToConnectionID   uint32
-	Content          string
+	ToConnectionID uint32
+	ResContent     string
 }
 
 func (r *ResponseMessagePacket) Type() uint8 {
 	return RESPONSE_MESSAGE
 }
 
-func (r *ResponseMessagePacket) Encode() (error, []byte) {
+func (r *ResponseMessagePacket) Encode() ([]byte, error) {
 	var body bytes.Buffer
 
-	if err := binary.Write(&body, binary.BigEndian, r.FromConnectionID); err != nil {
-		logger.Error("Error encoding the FromconnectionID into the buffer", "Error", err)
-		return err, nil
-	}
-
+	//Encoding each value of the slice into the buffer
 	if err := binary.Write(&body, binary.BigEndian, r.ToConnectionID); err != nil {
 		logger.Error("Error encoding ToconnectionID into the buffer", "Error", err)
-		return err, nil
+		return nil, err
 	}
-
 	//Converting the content into bytes because tcp
 	//Connection only accept raw bytes
-	msgToBytes := []byte(r.Content)
+	payloadContent := []byte(r.ResContent)
 
 	//Add a layer to prevent unexpected content message size
-	if len(msgToBytes) > 512 {
-		logger.Error("Message content is bigger than the expected")
+	if len(payloadContent) > 512 {
+		return nil, fmt.Errorf("Message size(%v) hit the maximum size: %w", len(payloadContent), errors.ErrPktSize)
+
 	}
 
-	if len(msgToBytes) == 0 {
-		logger.Error("There was no content in the playload")
+	if len(payloadContent) == 0 {
+		return nil, fmt.Errorf("Message size is 0: %w", errors.ErrPktSize)
 	}
 
-	body.Write(msgToBytes)
+	body.Write(payloadContent)
 
-	return nil, body.Bytes()
+	return body.Bytes(), nil
 
 }
 
 func (r *ResponseMessagePacket) Decode(b []byte) error {
+	if len(b[:4]) != 4 {
+		return fmt.Errorf("To connectionID is not 4 bytes: %w", errors.ErrPktSize)
+	}
+	r.ToConnectionID = binary.BigEndian.Uint32(b[:4])
+
+	if len(b[4:]) > 512 {
+		return fmt.Errorf("Message size(%v) hit the maximum size: %w", len(b[4:]), errors.ErrPktSize)
+	}
+	r.ResContent = string(b[4:])
+
 	return nil
 }

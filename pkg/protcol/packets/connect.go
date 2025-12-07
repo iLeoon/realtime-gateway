@@ -1,10 +1,10 @@
 package packets
 
 import (
-	"bytes"
 	"encoding/binary"
+	"fmt"
 
-	"github.com/iLeoon/chatserver/pkg/logger"
+	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
 type ConnectPacket struct {
@@ -15,22 +15,20 @@ func (c *ConnectPacket) Type() uint8 {
 	return CONNECT
 }
 
-func (c *ConnectPacket) Encode() (error, []byte) {
-	var body bytes.Buffer
+func (c *ConnectPacket) Encode() ([]byte, error) {
+	payloadSlice := make([]byte, 4)
 
-	if err := binary.Write(&body, binary.BigEndian, c.ConnectionID); err != nil {
-		logger.Error("Error encoding the connectionID into the buffer", "Error", err)
-		return err, nil
-	}
+	binary.BigEndian.PutUint32(payloadSlice, c.ConnectionID)
 
-	return nil, body.Bytes()
+	return payloadSlice, nil
 
 }
 
 func (c *ConnectPacket) Decode(b []byte) error {
-	connetionID := binary.BigEndian.Uint32(b[:4])
-
-	c.ConnectionID = connetionID
+	if len(b) != 4 {
+		return fmt.Errorf("%w", errors.ErrPktSize)
+	}
+	c.ConnectionID = binary.BigEndian.Uint32(b)
 
 	return nil
 

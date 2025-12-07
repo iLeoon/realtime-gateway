@@ -3,52 +3,55 @@ package packets
 import (
 	"bytes"
 	"encoding/binary"
-
-	"github.com/iLeoon/chatserver/pkg/logger"
+	"fmt"
+	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
-type SendMessage struct {
+type SendMessagePacket struct {
 	ConnectionID uint32
 	Content      string
 }
 
-func (s *SendMessage) Type() uint8 {
+func (s *SendMessagePacket) Type() uint8 {
 	return SEND_MESSAGE
 }
 
-func (s *SendMessage) Encode() (error, []byte) {
+func (s *SendMessagePacket) Encode() ([]byte, error) {
 
 	var body bytes.Buffer
 
 	if err := binary.Write(&body, binary.BigEndian, s.ConnectionID); err != nil {
-		logger.Error("Error encoding the connectionID into the buffer", "Error", err)
-		return err, nil
+		return nil, err
 	}
 
-	//Converting the content into bytes because tcp
-	//Connection only accept raw bytes
-	msgToBytes := []byte(s.Content)
+	//Converte content into bytes because tcpserver only accepts raw bytes
+	payloadContent := []byte(s.Content)
 
 	//Add a layer to prevent unexpected content message size
-	if len(msgToBytes) > 512 {
-		logger.Error("Message content is bigger than the expected")
+	if len(payloadContent) > 512 {
+		return nil, fmt.Errorf("Message size(%v) hit the maximum size: %w", len(payloadContent), errors.ErrPktSize)
 	}
 
-	if len(msgToBytes) == 0 {
-		logger.Error("There was no content in the playload")
+	if len(payloadContent) == 0 {
+		return nil, fmt.Errorf("Message size is 0: %w", errors.ErrPktSize)
 	}
 
-	body.Write(msgToBytes)
+	body.Write(payloadContent)
 
-	return nil, body.Bytes()
+	return body.Bytes(), nil
 }
 
-func (s *SendMessage) Decode(b []byte) error {
-	connetionID := binary.BigEndian.Uint32(b[:4])
+func (s *SendMessagePacket) Decode(b []byte) error {
+	if len(b[:4]) != 4 {
+		return fmt.Errorf("%w", errors.ErrPktSize)
+	}
+	s.ConnectionID = binary.BigEndian.Uint32(b[:4])
 
+	if len(b[4:]) > 512 {
+		return fmt.Errorf("Message size(%v) hit the maximum size: %w", len(b[4:]), errors.ErrPktSize)
+	}
 	payloadContent := string(b[4:])
 
-	s.ConnectionID = connetionID
 	s.Content = payloadContent
 	return nil
 
