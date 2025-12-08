@@ -30,7 +30,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session.Session) {
+func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient session.Session) {
 	//the actual websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -42,7 +42,7 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcp session
 		conn:         conn,
 		Send:         make(chan []byte, 256),
 		server:       s,
-		transporter:  tcp,
+		tcpClient:    tcpClient,
 		ConnectionID: rand.Uint32(),
 	}
 
@@ -60,7 +60,7 @@ func (s *wsServer) run() {
 			//Add the connectionID to the websocket map
 			s.clients[client.ConnectionID] = client
 			//Add the connectionID to the tcp server map
-			err := client.transporter.OnConnect(client.ConnectionID)
+			err := client.tcpClient.OnConnect(client.ConnectionID)
 			if err != nil {
 				logger.Error("Error on encoding the connect packt", "Error", err)
 				return
@@ -70,7 +70,7 @@ func (s *wsServer) run() {
 				//Remove the connectionID from the websocket map
 				delete(s.clients, client.ConnectionID)
 				//Remove the connectionID from the tcp server map
-				err := client.transporter.DisConnect(client.ConnectionID)
+				err := client.tcpClient.DisConnect(client.ConnectionID)
 				if err != nil {
 					logger.Error("Error on encoding the connect packt", "Error", err)
 					return

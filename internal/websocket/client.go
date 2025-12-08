@@ -28,7 +28,7 @@ type Client struct {
 	conn         *websocket.Conn
 	Send         chan []byte
 	server       *wsServer
-	transporter  session.Session
+	tcpClient    session.Session
 	ConnectionID uint32
 }
 
@@ -49,7 +49,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		readErr := c.transporter.ReadFromGateway(message, c.ConnectionID)
+		readErr := c.tcpClient.ReadFromGateway(message, c.ConnectionID)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
 			break
