@@ -1,7 +1,6 @@
 package tcp
 
 import (
-	"fmt"
 	"net"
 	"os"
 
@@ -44,29 +43,37 @@ func InitTCPServer(conf *config.Config) {
 }
 
 func (t *tcpServer) handleConn() {
-	defer t.conn.Close()
+	defer func() {
+		logger.Info("Tcp server connection is terminated")
+		t.conn.Close()
+	}()
 	for {
 		frame, err := protcol.DecodeFrame(t.conn)
-		fmt.Println("The decoded frame: ", frame)
+		if err != nil {
+			logger.Error("Invalid incoming data from gateway", "Error", err)
+			return
+		}
 		switch p := frame.Payload.(type) {
 		case *packets.ConnectPacket:
 			t.RegisterConnectionIDs(p)
 		case *packets.DisconnectPacket:
 			t.UnRegisterConnectionIDs(p)
 		case *packets.SendMessagePacket:
-			t.HandleSendMessageReq(p)
-
-		}
-		if err != nil {
-			logger.Error("An Error when decoding")
-			break
+			err := t.HandleSendMessageReq(p)
+			if err != nil {
+				logger.Error("Error on encoding response packet", "Error", err)
+				return
+			}
+		default:
+			logger.Error("invalid incoming data from gateway of packet type: %T", p)
+			return
 		}
 
 	}
 
 }
 
-func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) {
+func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) error {
 
 	//Construct the response message payload
 	var recipient uint32
@@ -81,20 +88,19 @@ func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) {
 		ResContent:     pkt.Content,
 	}
 
-	fmt.Println("Recipients", recipient)
-
 	frame := protcol.ConstructFrame(resPkt)
-	fmt.Println("THe frame inside Handle send message", frame)
-	frame.EncodeFrame(t.conn)
+	err := frame.EncodeFrame(t.conn)
+	if err != nil {
+		return err
+	}
+	return nil
 
 }
 
 func (t *tcpServer) RegisterConnectionIDs(pkt *packets.ConnectPacket) {
-	fmt.Println("Connection ID from resgiter Connection", pkt.ConnectionID)
 	t.clients[pkt.ConnectionID] = struct{}{}
 }
 
 func (t *tcpServer) UnRegisterConnectionIDs(pkt *packets.DisconnectPacket) {
-	fmt.Println("Connection ID to be removed from resgiter Connection", pkt.ConnectionID)
 	delete(t.clients, pkt.ConnectionID)
 }

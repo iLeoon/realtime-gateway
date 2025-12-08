@@ -59,6 +59,7 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 	frame[0] = f.Header.Magic
 	frame[1] = f.Header.Opcode
 	binary.BigEndian.PutUint32(frame[2:], uint32(sizeOfPayload))
+	f.Header.Length = uint32(sizeOfPayload)
 	//After we allocated the first 6 bytes as our header
 	//Now we copy the payload slice into the rest of the frame
 	copy(frame[6:], payloadSlice)

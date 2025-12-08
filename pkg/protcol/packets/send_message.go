@@ -27,15 +27,6 @@ func (s *SendMessagePacket) Encode() ([]byte, error) {
 	//Converte content into bytes because tcpserver only accepts raw bytes
 	payloadContent := []byte(s.Content)
 
-	//Add a layer to prevent unexpected content message size
-	if len(payloadContent) > 512 {
-		return nil, fmt.Errorf("Message size(%v) hit the maximum size: %w", len(payloadContent), errors.ErrPktSize)
-	}
-
-	if len(payloadContent) == 0 {
-		return nil, fmt.Errorf("Message size is 0: %w", errors.ErrPktSize)
-	}
-
 	body.Write(payloadContent)
 
 	return body.Bytes(), nil
@@ -46,6 +37,9 @@ func (s *SendMessagePacket) Decode(b []byte) error {
 		return fmt.Errorf("%w", errors.ErrPktSize)
 	}
 	s.ConnectionID = binary.BigEndian.Uint32(b[:4])
+	if s.ConnectionID == 0 {
+		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
+	}
 
 	if len(b[4:]) > 512 {
 		return fmt.Errorf("Message size(%v) hit the maximum size: %w", len(b[4:]), errors.ErrPktSize)
@@ -53,6 +47,10 @@ func (s *SendMessagePacket) Decode(b []byte) error {
 	payloadContent := string(b[4:])
 
 	s.Content = payloadContent
+
+	if len(s.Content) == 0 {
+		return fmt.Errorf("The Message cannot be of size 0: %w", errors.ErrPktSize)
+	}
 	return nil
 
 }

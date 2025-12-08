@@ -60,13 +60,21 @@ func (s *wsServer) run() {
 			//Add the connectionID to the websocket map
 			s.clients[client.ConnectionID] = client
 			//Add the connectionID to the tcp server map
-			client.transporter.OnConnect(client.ConnectionID)
+			err := client.transporter.OnConnect(client.ConnectionID)
+			if err != nil {
+				logger.Error("Error on encoding the connect packt", "Error", err)
+				return
+			}
 		case client := <-s.unregister:
 			if _, ok := s.clients[client.ConnectionID]; ok {
 				//Remove the connectionID from the websocket map
 				delete(s.clients, client.ConnectionID)
 				//Remove the connectionID from the tcp server map
-				client.transporter.DisConnect(client.ConnectionID)
+				err := client.transporter.DisConnect(client.ConnectionID)
+				if err != nil {
+					logger.Error("Error on encoding the connect packt", "Error", err)
+					return
+				}
 				//Close the channel
 				close(client.Send)
 			}

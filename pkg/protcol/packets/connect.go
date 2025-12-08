@@ -29,6 +29,10 @@ func (c *ConnectPacket) Decode(b []byte) error {
 		return fmt.Errorf("%w", errors.ErrPktSize)
 	}
 	c.ConnectionID = binary.BigEndian.Uint32(b)
+	if c.ConnectionID == 0 {
+		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
+
+	}
 
 	return nil
 

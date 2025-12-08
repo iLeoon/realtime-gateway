@@ -1,8 +1,6 @@
 package router
 
 import (
-	"fmt"
-
 	"github.com/iLeoon/chatserver/internal/websocket"
 	"github.com/iLeoon/chatserver/pkg/protcol"
 	"github.com/iLeoon/chatserver/pkg/protcol/packets"
@@ -30,7 +28,6 @@ func (r *Router) Route(f *protcol.Frame) {
 func (r *Router) handleResponseMessage(pkt *packets.ResponseMessagePacket) {
 
 	recipient := pkt.ToConnectionID
-	fmt.Println(recipient)
 
 	client := (*r.clients)[recipient]
 

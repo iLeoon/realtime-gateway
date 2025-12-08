@@ -1,7 +1,8 @@
-package tcp
+package tcpclient
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 
 	"github.com/iLeoon/chatserver/internal/config"
@@ -38,7 +39,7 @@ func NewTCPClient(conf *config.Config, router *router.Router) *tcpClient {
 
 }
 
-func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) {
+func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) error {
 	cp := &ClientPayload{}
 	json.Unmarshal(data, cp)
 	switch cp.Opcode {
@@ -50,43 +51,56 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) {
 			Content:      data.Content,
 		}
 		frame := protcol.ConstructFrame(pkt)
-		frame.EncodeFrame(t.conn)
+		err := frame.EncodeFrame(t.conn)
+		if err != nil {
+			return err
+		}
 
 	default:
-		logger.Error("The type event is either wrong or unresgistered")
-
+		return fmt.Errorf("Invalid packet type %s", cp.Opcode)
 	}
-
+	return nil
 }
 
 func (t *tcpClient) ReadFromServer() {
-	defer t.conn.Close()
+	defer func() {
+		t.conn.Close()
+		logger.Info("Gateway closed connection to tcp server")
+	}()
 	for {
 		frame, err := protcol.DecodeFrame(t.conn)
 
 		if err != nil {
-			logger.Error("Error on decoding packets from server", "Error", err)
-			break
+			logger.Error("Invalid incoming data from tcp server", "Error", err)
+			return
 		}
 		t.router.Route(frame)
 
 	}
 }
 
-func (t *tcpClient) OnConnect(connectionID uint32) {
+func (t *tcpClient) OnConnect(connectionID uint32) error {
 	pkt := &packets.ConnectPacket{
 		ConnectionID: connectionID,
 	}
 
 	frame := protcol.ConstructFrame(pkt)
-	frame.EncodeFrame(t.conn)
+	err := frame.EncodeFrame(t.conn)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (t *tcpClient) DisConnect(connectionID uint32) {
+func (t *tcpClient) DisConnect(connectionID uint32) error {
 	pkt := &packets.DisconnectPacket{
 		ConnectionID: connectionID,
 	}
 
 	frame := protcol.ConstructFrame(pkt)
-	frame.EncodeFrame(t.conn)
+	err := frame.EncodeFrame(t.conn)
+	if err != nil {
+		return err
+	}
+	return nil
 }

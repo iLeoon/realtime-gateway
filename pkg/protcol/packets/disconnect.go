@@ -31,6 +31,11 @@ func (d *DisconnectPacket) Decode(b []byte) error {
 	}
 	d.ConnectionID = binary.BigEndian.Uint32(b)
 
+	if d.ConnectionID == 0 {
+		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
+
+	}
+
 	return nil
 
 }

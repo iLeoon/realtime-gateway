@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/chatserver/pkg/logger"
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
@@ -23,7 +22,6 @@ func (r *ResponseMessagePacket) Encode() ([]byte, error) {
 
 	//Encoding each value of the slice into the buffer
 	if err := binary.Write(&body, binary.BigEndian, r.ToConnectionID); err != nil {
-		logger.Error("Error encoding ToconnectionID into the buffer", "Error", err)
 		return nil, err
 	}
 	//Converting the content into bytes because tcp
@@ -31,15 +29,6 @@ func (r *ResponseMessagePacket) Encode() ([]byte, error) {
 	payloadContent := []byte(r.ResContent)
 
 	//Add a layer to prevent unexpected content message size
-	if len(payloadContent) > 512 {
-		return nil, fmt.Errorf("Message size(%v) hit the maximum size: %w", len(payloadContent), errors.ErrPktSize)
-
-	}
-
-	if len(payloadContent) == 0 {
-		return nil, fmt.Errorf("Message size is 0: %w", errors.ErrPktSize)
-	}
-
 	body.Write(payloadContent)
 
 	return body.Bytes(), nil
@@ -47,15 +36,24 @@ func (r *ResponseMessagePacket) Encode() ([]byte, error) {
 }
 
 func (r *ResponseMessagePacket) Decode(b []byte) error {
+
 	if len(b[:4]) != 4 {
 		return fmt.Errorf("To connectionID is not 4 bytes: %w", errors.ErrPktSize)
 	}
+
 	r.ToConnectionID = binary.BigEndian.Uint32(b[:4])
+	if r.ToConnectionID == 0 {
+		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
+	}
 
 	if len(b[4:]) > 512 {
 		return fmt.Errorf("Message size(%v) hit the maximum size: %w", len(b[4:]), errors.ErrPktSize)
 	}
+
 	r.ResContent = string(b[4:])
 
+	if len(r.ResContent) == 0 {
+		return fmt.Errorf("The Message cannot be of size 0: %w", errors.ErrPktSize)
+	}
 	return nil
 }

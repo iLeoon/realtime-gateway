@@ -37,7 +37,6 @@ func (c *Client) readPump() {
 		c.server.unregister <- c
 		c.conn.Close()
 	}()
-	defer c.conn.Close()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(appData string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
@@ -50,7 +49,11 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.transporter.ReadFromGateway(message, c.ConnectionID)
+		readErr := c.transporter.ReadFromGateway(message, c.ConnectionID)
+		if readErr != nil {
+			logger.Error("Error on trying to read message from browser", "Error", readErr)
+			break
+		}
 	}
 
 }
