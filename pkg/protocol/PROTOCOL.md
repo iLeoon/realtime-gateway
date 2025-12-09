@@ -11,7 +11,10 @@ typed packets, encodes them into binary frames, and sends them over a TCP
 
 connection. Responses from the engine travel back through the same path in
 
-reverse.
+reverse. 
+
+The overall packet structure and flow-control principles were inspired by the lightweight binary protocol used in [MQTT](https://github.com/eclipse-paho/paho.mqtt.golang).
+
 
   
 
