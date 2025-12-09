@@ -2,8 +2,8 @@ package router
 
 import (
 	"github.com/iLeoon/realtime-gateway/internal/websocket"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 )
 
 // Router forwards decoded packets from the TCP engine to the appropriate
@@ -24,7 +24,7 @@ func NewRouter(clients *map[uint32]*websocket.Client) *Router {
 // Route receives a decoded protocol frame from the TCP engine and
 // dispatches it to the appropriate handler based on the concrete packet
 // type stored inside the frame’s payload.
-func (r *Router) Route(f *protcol.Frame) {
+func (r *Router) Route(f *protocol.Frame) {
 	switch pkt := f.Payload.(type) {
 	case *packets.ResponseMessagePacket:
 		r.handleResponseMessage(pkt)

@@ -1,16 +1,16 @@
-package protcol
+package protocol
 
 import (
 	"encoding/binary"
 	"fmt"
 	"io"
 
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 )
 
 const (
-	ProtcolMagic  byte   = 0x89 // Protocol identifier.
+	protocolMagic byte   = 0x89 // Protocol identifier.
 	MaxPayloadLen uint32 = 1024 // Verify payload length.
 )
 
@@ -23,7 +23,7 @@ const (
 // The frame struct consists of
 //
 // Magic:   1 byte   - protocol identifier
-// Opcode:  1 byte   - protcol type
+// Opcode:  1 byte   - protocol type
 // Length:  4 bytes  - payload length
 // Payload: M bytes  - actual user/application data
 
@@ -48,7 +48,7 @@ type FrameHeader struct {
 func ConstructFrame(p packets.BuildPayload) *Frame {
 	return &Frame{
 		Header: FrameHeader{
-			Magic:  ProtcolMagic,
+			Magic:  protocolMagic,
 			Opcode: p.Type(),
 		},
 		Payload: p,
@@ -123,7 +123,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	}
 
 	//Validate the magic value from the incoming packet
-	if header[0] != ProtcolMagic {
+	if header[0] != protocolMagic {
 		return nil, fmt.Errorf("%w: magic value is %v", errors.ErrUnknownMagic, header[0])
 	}
 

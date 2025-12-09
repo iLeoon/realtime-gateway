@@ -6,8 +6,8 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 )
 
 // TcpServer represents the central processing engine of the system. It is
@@ -66,7 +66,7 @@ func (t *tcpServer) handleConn() {
 	for {
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
-		frame, err := protcol.DecodeFrame(t.conn)
+		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
 			logger.Error("Invalid data from gateway", "Error", err)
 			return
@@ -109,7 +109,7 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 		ResContent:     pkt.Content,
 	}
 
-	frame := protcol.ConstructFrame(resPkt)
+	frame := protocol.ConstructFrame(resPkt)
 	err := frame.EncodeFrame(t.conn)
 	if err != nil {
 		return err

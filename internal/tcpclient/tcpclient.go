@@ -8,8 +8,8 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/router"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol"
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 )
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -79,7 +79,7 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) error {
 		}
 
 		// Construct the frame, encode it, and then send it to the TCP server.
-		frame := protcol.ConstructFrame(pkt)
+		frame := protocol.ConstructFrame(pkt)
 		err := frame.EncodeFrame(t.conn)
 		if err != nil {
 			return err
@@ -105,7 +105,7 @@ func (t *tcpClient) ReadFromServer() {
 	}()
 	for {
 		// Decode the frame.
-		frame, err := protcol.DecodeFrame(t.conn)
+		frame, err := protocol.DecodeFrame(t.conn)
 
 		if err != nil {
 			logger.Error("Invalid incoming data from tcp server", "Error", err)
@@ -131,7 +131,7 @@ func (t *tcpClient) OnConnect(connectionID uint32) error {
 		ConnectionID: connectionID,
 	}
 
-	frame := protcol.ConstructFrame(pkt)
+	frame := protocol.ConstructFrame(pkt)
 	err := frame.EncodeFrame(t.conn)
 	if err != nil {
 		return err
@@ -145,7 +145,7 @@ func (t *tcpClient) DisConnect(connectionID uint32) error {
 		ConnectionID: connectionID,
 	}
 
-	frame := protcol.ConstructFrame(pkt)
+	frame := protocol.ConstructFrame(pkt)
 	err := frame.EncodeFrame(t.conn)
 	if err != nil {
 		return err

@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
 )
 
 // DisconnectPacket indicates that the client intends to terminate the

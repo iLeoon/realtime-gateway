@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
 )
 
 // ResponseMessagePacket represents a message delivered from the server
