@@ -1,9 +1,9 @@
 package router
 
 import (
-	"github.com/iLeoon/chatserver/internal/websocket"
-	"github.com/iLeoon/chatserver/pkg/protcol"
-	"github.com/iLeoon/chatserver/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/internal/websocket"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
 )
 
 // Router forwards decoded packets from the TCP engine to the appropriate

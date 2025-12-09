@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/iLeoon/chatserver/pkg/protcol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
 )
 
 // SendMessagePacket carries an outbound message from a client to another

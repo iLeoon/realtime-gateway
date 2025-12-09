@@ -1,4 +1,4 @@
-module github.com/iLeoon/chatserver
+module github.com/iLeoon/realtime-gateway
 
 go 1.22.5
 

@@ -3,7 +3,7 @@ package packets
 import (
 	"fmt"
 
-	"github.com/iLeoon/chatserver/pkg/protcol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
 )
 
 // ConstructPacket creates and returns the appropriate packet instance for

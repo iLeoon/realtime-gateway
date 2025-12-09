@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/iLeoon/chatserver/pkg/logger"
-	"github.com/iLeoon/chatserver/pkg/session"
+	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
 // WebSocket timing configuration.

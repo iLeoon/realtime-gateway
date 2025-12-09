@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/iLeoon/chatserver/pkg/protcol/errors"
-	"github.com/iLeoon/chatserver/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/errors"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
 )
 
 const (

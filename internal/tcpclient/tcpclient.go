@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/iLeoon/chatserver/internal/config"
-	"github.com/iLeoon/chatserver/internal/router"
-	"github.com/iLeoon/chatserver/pkg/logger"
-	"github.com/iLeoon/chatserver/pkg/protcol"
-	"github.com/iLeoon/chatserver/pkg/protcol/packets"
+	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/internal/router"
+	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol"
+	"github.com/iLeoon/realtime-gateway/pkg/protcol/packets"
 )
 
 // TcpClient acts as the transporter between the WebSocket gateway and the

@@ -3,9 +3,9 @@ package websocket
 import (
 	"net/http"
 
-	"github.com/iLeoon/chatserver/internal/config"
-	"github.com/iLeoon/chatserver/pkg/logger"
-	"github.com/iLeoon/chatserver/pkg/session"
+	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
 // Start launches the WebSocket gateway and initializes the TCP client,
