@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -43,12 +42,16 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err) {
+			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				logger.Info("Client disconnected", "ClientID", c.ConnectionID)
+			}
 
-				logger.Error("error on incoming message from the client", "Error", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				logger.Error("Unexpected error shutting down websocket server", "Error", err)
 			}
 			break
 		}
+		// Forward the messages to ReadFromGateway with the proper data.
 		readErr := c.tcpClient.ReadFromGateway(message, c.ConnectionID)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
@@ -68,7 +71,6 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			fmt.Println(ok)
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -80,7 +82,6 @@ func (c *Client) writePump() {
 
 				logger.Error("An error while tring to write the message", "Error", err)
 			}
-			fmt.Println(string(message))
 			msg.Write(message)
 			if err := msg.Close(); err != nil {
 				logger.Error("Failed to close writer", "Error", err)

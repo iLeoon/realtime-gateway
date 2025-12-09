@@ -7,8 +7,14 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
+// DisconnectPacket indicates that the client intends to terminate the
+// session gracefully.
 type DisconnectPacket struct {
 	ConnectionID uint32
+}
+
+func (d *DisconnectPacket) String() string {
+	return fmt.Sprintf("DisconnectPacket{ConnectionID: %d}", d.ConnectionID)
 }
 
 func (d *DisconnectPacket) Type() uint8 {

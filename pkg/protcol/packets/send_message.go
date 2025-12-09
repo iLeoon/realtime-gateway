@@ -7,9 +7,15 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
+// SendMessagePacket carries an outbound message from a client to another
+// client or to a group.
 type SendMessagePacket struct {
 	ConnectionID uint32
 	Content      string
+}
+
+func (s *SendMessagePacket) String() string {
+	return fmt.Sprintf("SendMessagePacket{ConnectionID: %d, Content: %q}", s.ConnectionID, s.Content)
 }
 
 func (s *SendMessagePacket) Type() uint8 {

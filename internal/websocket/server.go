@@ -1,20 +1,23 @@
 package websocket
 
 import (
-	"math/rand"
-	"net/http"
-
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/chatserver/pkg/logger"
 	"github.com/iLeoon/chatserver/pkg/session"
+	"math/rand"
+	"net/http"
 )
 
+// WsServer manages all active WebSocket clients. It maintains a map of
+// connected sessions and uses register/unregister channels to handle
+// client lifecycle events
 type wsServer struct {
 	clients    map[uint32]*Client
 	register   chan *Client
 	unregister chan *Client
 }
 
+// Create new websocket server
 func NewWsServer() *wsServer {
 	return &wsServer{
 		clients:    make(map[uint32]*Client),
@@ -30,11 +33,15 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// InitServerFunc upgrades the incoming HTTP request to a WebSocket
+// connection, initializes a new client session using the provided Session
+// implementation, registers the client, and starts the read and write pump
+// goroutines for message handling.
 func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient session.Session) {
 	//the actual websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logger.Error("error on upgrading raw tcp connection into websocekt", "Error", err)
+		logger.Error("Error on upgrading raw tcp connection into websocekt", "Error", err)
 		return
 	}
 
@@ -83,6 +90,9 @@ func (s *wsServer) run() {
 	}
 }
 
+// Clients returns a pointer to the WebSocket server’s active client map.
+// This allows external components—such as the Router—to access and route
+// messages to currently connected WebSocket clients.
 func (s *wsServer) Clients() *map[uint32]*Client {
 	return &s.clients
 }

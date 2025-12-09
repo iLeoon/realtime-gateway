@@ -7,14 +7,22 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
+// ConnectPacket represents a connection request sent by a client when it
+// initially joins the system.
 type ConnectPacket struct {
-	ConnectionID uint32
+	ConnectionID uint32 // ConnectionID is a unique identifier for the connecting client.
 }
 
+func (c *ConnectPacket) String() string {
+	return fmt.Sprintf("ConnectPacket{ConnectionID: %d}", c.ConnectionID)
+}
+
+// Type returns the opcode.
 func (c *ConnectPacket) Type() uint8 {
 	return CONNECT
 }
 
+// Encode serializes the packet fields into a payload.
 func (c *ConnectPacket) Encode() ([]byte, error) {
 	payloadSlice := make([]byte, 4)
 
@@ -24,6 +32,7 @@ func (c *ConnectPacket) Encode() ([]byte, error) {
 
 }
 
+// Decode parses the payload and fills the struct.
 func (c *ConnectPacket) Decode(b []byte) error {
 	if len(b) != 4 {
 		return fmt.Errorf("%w", errors.ErrPktSize)
@@ -33,7 +42,5 @@ func (c *ConnectPacket) Decode(b []byte) error {
 		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
 
 	}
-
 	return nil
-
 }

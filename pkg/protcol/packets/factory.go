@@ -6,10 +6,10 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
-//Build the payload pakcet based on the type event
-//Coming from the browser and return a pointer
-//To that packet otherwise it's a wrong packet type
-
+// ConstructPacket creates and returns the appropriate packet instance for
+// the given opcode. It acts as a factory that maps each opcode to its
+// corresponding concrete packet type. Internally, the function allocates
+// the specific packet struct and returns it as a BuildPayload interface.
 func ConstructPacket(op uint8) (BuildPayload, error) {
 	switch op {
 	case SEND_MESSAGE:

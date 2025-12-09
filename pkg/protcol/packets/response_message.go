@@ -8,9 +8,15 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/errors"
 )
 
+// ResponseMessagePacket represents a message delivered from the server
+// back to a client.
 type ResponseMessagePacket struct {
 	ToConnectionID uint32
 	ResContent     string
+}
+
+func (r *ResponseMessagePacket) String() string {
+	return fmt.Sprintf("ResponseMessagePacket{ToConnectionID: %d, ResContent: %q}", r.ToConnectionID, r.ResContent)
 }
 
 func (r *ResponseMessagePacket) Type() uint8 {

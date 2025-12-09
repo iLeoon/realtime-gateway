@@ -10,18 +10,28 @@ import (
 	"github.com/iLeoon/chatserver/pkg/protcol/packets"
 )
 
+// TcpServer represents the central processing engine of the system. It is
+// responsible for managing active WebSocket clients, receiving packets from
+// the gateway, applying server-side logic, and routing messages to the
+// appropriate clients.
 type tcpServer struct {
-	conn    net.Conn
+	conn net.Conn
+
+	// A map of connected client IDs to their active WebSocket
+	// sessions, allowing direct message delivery.
 	clients map[uint32]struct{}
 }
 
-func NewTcpServer(conn net.Conn) *tcpServer {
+// Create a new instance of the TCP server.
+func newTcpServer(conn net.Conn) *tcpServer {
 	return &tcpServer{
 		clients: make(map[uint32]struct{}),
 		conn:    conn,
 	}
 }
 
+// Lanunches the server, this method must be invoked inside a separate
+// goroutine because it blocks while listening for incoming packets.
 func InitTCPServer(conf *config.Config) {
 	listner, err := net.Listen("tcp", conf.TCPServer.Port)
 	if err != nil {
@@ -32,50 +42,61 @@ func InitTCPServer(conf *config.Config) {
 	defer listner.Close()
 	logger.Info("TCP server is up and running")
 
-	//There will be only one connection to the tcp server
-	//The tcp client which means no need for a loop at least for now
+	// There will be only one connection to the tcp server
+	// The tcp client which means no need for a loop at least for now
 	conn, err := listner.Accept()
 	if err != nil {
 		logger.Error("An error occured while trying to connect a client", "Error", err)
 	}
-	server := NewTcpServer(conn)
-	server.handleConn()
+	server := newTcpServer(conn)
+	go server.handleConn()
 }
 
+// handleConn is the main packet dispatcher for the TcpServer. It receives
+// decoded packets from the gateway and routes them to their corresponding
+// handlers using a switch on the packet opcode.
+//
+// It uses type assertion to convert the generic BuildPayload
+// its concrete SendMessagePacket type.
 func (t *tcpServer) handleConn() {
 	defer func() {
 		logger.Info("Tcp server connection is terminated")
 		t.conn.Close()
 	}()
 	for {
+		// Call the decoder function on the connection to read
+		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protcol.DecodeFrame(t.conn)
 		if err != nil {
-			logger.Error("Invalid incoming data from gateway", "Error", err)
+			logger.Error("Invalid data from gateway", "Error", err)
 			return
 		}
+
+		// Route the frame to it's appropriate handler.
+		// uses a type assertion to convert the generic BuildPayload interface into
+		// its concrete *packet type
 		switch p := frame.Payload.(type) {
 		case *packets.ConnectPacket:
-			t.RegisterConnectionIDs(p)
+			t.registerConnectionIDs(p)
 		case *packets.DisconnectPacket:
-			t.UnRegisterConnectionIDs(p)
+			t.unRegisterConnectionIDs(p)
 		case *packets.SendMessagePacket:
-			err := t.HandleSendMessageReq(p)
+			err := t.handleSendMessageReq(p)
 			if err != nil {
 				logger.Error("Error on encoding response packet", "Error", err)
 				return
 			}
 		default:
-			logger.Error("invalid incoming data from gateway of packet type: %T", p)
+			logger.Error("Invalid packet type from gateway: %T", p)
 			return
 		}
-
+		logger.Debug("Decode packet", "packet", frame.Payload.String())
 	}
 
 }
 
-func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) error {
-
-	//Construct the response message payload
+// handleSendMessage processes an inbound SendMessage packet.
+func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 	var recipient uint32
 	for id, _ := range t.clients {
 		if id != pkt.ConnectionID {
@@ -94,13 +115,16 @@ func (t *tcpServer) HandleSendMessageReq(pkt *packets.SendMessagePacket) error {
 		return err
 	}
 	return nil
-
 }
 
-func (t *tcpServer) RegisterConnectionIDs(pkt *packets.ConnectPacket) {
+// registerConnectionIDs add a connecteionID to the map
+// Uses struct{} because it costs 0 bytes in memory.
+// You can read https://dave.cheney.net/2014/03/25/the-empty-struct
+func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
 	t.clients[pkt.ConnectionID] = struct{}{}
 }
 
-func (t *tcpServer) UnRegisterConnectionIDs(pkt *packets.DisconnectPacket) {
+// unRegisterConnectionIDs removes the connectionID from the map
+func (t *tcpServer) unRegisterConnectionIDs(pkt *packets.DisconnectPacket) {
 	delete(t.clients, pkt.ConnectionID)
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/iLeoon/chatserver/internal/config"
 	"github.com/iLeoon/chatserver/internal/router"
 	"github.com/iLeoon/chatserver/internal/tcp"
@@ -15,7 +17,7 @@ func main() {
 
 	if err != nil {
 		logger.Error("can't load configuration", "Error", err)
-		panic(err)
+		os.Exit(1)
 	}
 	go tcp.InitTCPServer(conf)
 	wsServer := websocket.NewWsServer()
