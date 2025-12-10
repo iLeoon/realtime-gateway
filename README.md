@@ -23,8 +23,7 @@ The gateway architecture consists of two major components:
   packets, routing messages, managing client sessions, and performing the core
   application logic.
 
-These two components communicate using a custom binary protocol documented in
-[`PROTOCOL.md`](./pkg/protocol/PROTOCOL.md).
+These two components communicate using a custom binary protocol.
 
 ---
 

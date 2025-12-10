@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"fmt"
 	"net"
 	"os"
 
@@ -42,14 +43,16 @@ func InitTCPServer(conf *config.Config) {
 	defer listner.Close()
 	logger.Info("TCP server is up and running")
 
-	// There will be only one connection to the tcp server
-	// The tcp client which means no need for a loop at least for now
-	conn, err := listner.Accept()
-	if err != nil {
-		logger.Error("An error occured while trying to connect a client", "Error", err)
+	// Listening to the connections
+	for {
+		conn, err := listner.Accept()
+		if err != nil {
+			logger.Error("An error occured while trying to connect a client", "Error", err)
+			continue
+		}
+		server := newTcpServer(conn)
+		go server.handleConn()
 	}
-	server := newTcpServer(conn)
-	go server.handleConn()
 }
 
 // handleConn is the main packet dispatcher for the TcpServer. It receives
@@ -67,6 +70,7 @@ func (t *tcpServer) handleConn() {
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protocol.DecodeFrame(t.conn)
+
 		if err != nil {
 			logger.Error("Invalid data from gateway", "Error", err)
 			return
@@ -122,6 +126,7 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 // You can read https://dave.cheney.net/2014/03/25/the-empty-struct
 func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
 	t.clients[pkt.ConnectionID] = struct{}{}
+	fmt.Println(t.clients)
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map

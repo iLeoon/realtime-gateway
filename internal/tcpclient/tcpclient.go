@@ -27,15 +27,17 @@ import (
 //	Browser JSON → ReadFromGateway → ConstructPacket → EncodeFrame → TCP Engine
 //	TCP Engine  → DecodeFrame → Route Packet → Handle Response → WebSocket Client
 type tcpClient struct {
-	conn   net.Conn
-	router *router.Router // Router routes the data coming from Tcp server to websocket gateway.
+	conn         net.Conn
+	router       *router.Router // Router routes the data coming from Tcp server to websocket gateway.
+	c            chan uint32
+	connectionID uint32
 }
 
 // NewTcpClient establishes the TCP connection between the WebSocket
 // gateway and the TCP engine. This function is invoked from the
 // WebSocket server during startup to create the bride
 // and be to send/receive messages.
-func NewTCPClient(conf *config.Config, router *router.Router) *tcpClient {
+func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) *tcpClient {
 	conn, err := net.Dial("tcp", conf.TCPServer.Port)
 	if err != nil {
 		logger.Error("Can't connect to the tcp server", "Error", err)
@@ -46,6 +48,7 @@ func NewTCPClient(conf *config.Config, router *router.Router) *tcpClient {
 	client := &tcpClient{
 		conn:   conn,
 		router: router,
+		c:      c,
 	}
 	go client.ReadFromServer()
 	return client
@@ -61,6 +64,7 @@ func NewTCPClient(conf *config.Config, router *router.Router) *tcpClient {
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
 func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) error {
+	t.connectionID = connectionID
 	cp := &ClientPayload{}
 
 	// Unmarshal the incmoing byets from the gateway to the client payload struct
@@ -106,8 +110,8 @@ func (t *tcpClient) ReadFromServer() {
 	for {
 		// Decode the frame.
 		frame, err := protocol.DecodeFrame(t.conn)
-
 		if err != nil {
+			t.c <- t.connectionID
 			logger.Error("Invalid incoming data from tcp server", "Error", err)
 			return
 		}

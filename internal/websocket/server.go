@@ -1,11 +1,12 @@
 package websocket
 
 import (
+	"math/rand"
+	"net/http"
+
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
-	"math/rand"
-	"net/http"
 )
 
 // WsServer manages all active WebSocket clients. It maintains a map of
@@ -15,6 +16,7 @@ type wsServer struct {
 	clients    map[uint32]*Client
 	register   chan *Client
 	unregister chan *Client
+	SignalToWs chan uint32
 }
 
 // Create new websocket server
@@ -23,6 +25,7 @@ func NewWsServer() *wsServer {
 		clients:    make(map[uint32]*Client),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		SignalToWs: make(chan uint32),
 	}
 }
 
@@ -55,6 +58,7 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient s
 
 	client.server.register <- client
 	logger.Info("A new client has been connected to the server")
+
 	go client.readPump()
 	go client.writePump()
 
@@ -85,6 +89,11 @@ func (s *wsServer) run() {
 				//Close the channel
 				close(client.Send)
 			}
+		case id := <-s.SignalToWs:
+			client := s.clients[id]
+			delete(s.clients, client.ConnectionID)
+			close(client.Send)
+			client.conn.Close()
 
 		}
 	}

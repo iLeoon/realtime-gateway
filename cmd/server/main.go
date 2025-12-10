@@ -32,7 +32,7 @@ func main() {
 
 	// Start a new TCP client to connect between TCP server
 	// and WebSocket gateway.
-	tcpClient := tcpclient.NewTCPClient(conf, router)
+	tcpClient := tcpclient.NewTCPClient(conf, router, wsServer.SignalToWs)
 
 	// Start the gateway.
 	websocket.Start(wsServer, conf, tcpClient)
