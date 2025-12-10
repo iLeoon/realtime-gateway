@@ -11,7 +11,7 @@ logic.
 
 # Overview
 
-![System Architecture Diagram](./docs/System%20Arhc%202.svg)
+![System Architecture Diagram](./docs/Architecture%20review.svg)
 
 The gateway architecture consists of two major components:
 
