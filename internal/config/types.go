@@ -3,14 +3,19 @@ package config
 // a file that defines the configuration variables
 
 type Config struct {
-	TCPServer
+	TCP
 	Websocket
+	HttpServer
 }
 
-type TCPServer struct {
-	Port string
+type TCP struct {
+	TcpPort string
 }
 
 type Websocket struct {
-	Port string
+	WsPort string
+}
+
+type HttpServer struct {
+	HttpPort string
 }

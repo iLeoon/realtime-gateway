@@ -1,7 +1,6 @@
 package tcp
 
 import (
-	"fmt"
 	"net"
 	"os"
 
@@ -34,7 +33,7 @@ func newTcpServer(conn net.Conn) *tcpServer {
 // Lanunches the server, this method must be invoked inside a separate
 // goroutine because it blocks while listening for incoming packets.
 func InitTCPServer(conf *config.Config) {
-	listner, err := net.Listen("tcp", conf.TCPServer.Port)
+	listner, err := net.Listen("tcp", conf.TCP.TcpPort)
 	if err != nil {
 		logger.Error("An error occured on creating tcp server", "Error", err)
 		os.Exit(1)
@@ -126,7 +125,6 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 // You can read https://dave.cheney.net/2014/03/25/the-empty-struct
 func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
 	t.clients[pkt.ConnectionID] = struct{}{}
-	fmt.Println(t.clients)
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map

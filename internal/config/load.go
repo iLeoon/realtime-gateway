@@ -22,15 +22,20 @@ func Load() (*Config, error) {
 	}
 
 	c := &Config{}
-	c.TCPServer.Port, err = getEnv("TCP_SERVER_PORT")
+	c.TCP.TcpPort, err = getEnv("TCP_SERVER_PORT")
 	if err != nil {
 		return nil, err
 	}
 
-	c.Websocket.Port, err = getEnv("WEBSOKCET_SERVER_PORT")
+	c.Websocket.WsPort, err = getEnv("WEBSOKCET_SERVER_PORT")
 	if err != nil {
 		return nil, err
 	}
+	c.HttpServer.HttpPort, err = getEnv("HTTP_PORT")
+	if err != nil {
+		return nil, err
+	}
+
 	return c, nil
 }
 

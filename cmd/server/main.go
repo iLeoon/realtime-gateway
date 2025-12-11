@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/internal/httpserver"
 	"github.com/iLeoon/realtime-gateway/internal/router"
 	"github.com/iLeoon/realtime-gateway/internal/tcp"
 	"github.com/iLeoon/realtime-gateway/internal/tcpclient"
@@ -33,6 +34,8 @@ func main() {
 	// Start a new TCP client to connect between TCP server
 	// and WebSocket gateway.
 	tcpClient := tcpclient.NewTCPClient(conf, router, wsServer.SignalToWs)
+
+	go httpserver.Start(conf)
 
 	// Start the gateway.
 	websocket.Start(wsServer, conf, tcpClient)

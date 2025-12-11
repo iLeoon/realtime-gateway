@@ -38,7 +38,7 @@ type tcpClient struct {
 // WebSocket server during startup to create the bride
 // and be to send/receive messages.
 func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) *tcpClient {
-	conn, err := net.Dial("tcp", conf.TCPServer.Port)
+	conn, err := net.Dial("tcp", conf.TCP.TcpPort)
 	if err != nil {
 		logger.Error("Can't connect to the tcp server", "Error", err)
 	}

@@ -21,7 +21,7 @@ func Start(ws *wsServer, conf *config.Config, tcp session.Session) {
 
 	logger.Info("The websocekt server is up and running..")
 
-	err := http.ListenAndServe(conf.Websocket.Port, nil)
+	err := http.ListenAndServe(conf.Websocket.WsPort, nil)
 	if err != nil {
 		logger.Error("Error while trying to listen to the websokcet server", "Error", err)
 		return
