@@ -37,10 +37,11 @@ type tcpClient struct {
 // gateway and the TCP engine. This function is invoked from the
 // WebSocket server during startup to create the bride
 // and be to send/receive messages.
-func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) *tcpClient {
+func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*tcpClient, error) {
 	conn, err := net.Dial("tcp", conf.TCP.TcpPort)
 	if err != nil {
-		logger.Error("Can't connect to the tcp server", "Error", err)
+		return nil, err
+
 	}
 
 	logger.Info("The websocket gateway successfully connected to the tcp server")
@@ -51,7 +52,7 @@ func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) *tc
 		c:      c,
 	}
 	go client.ReadFromServer()
-	return client
+	return client, nil
 
 }
 

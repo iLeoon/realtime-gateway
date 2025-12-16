@@ -32,16 +32,16 @@ func newTcpServer(conn net.Conn) *tcpServer {
 
 // Lanunches the server, this method must be invoked inside a separate
 // goroutine because it blocks while listening for incoming packets.
-func InitTCPServer(conf *config.Config) {
+func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
 	listner, err := net.Listen("tcp", conf.TCP.TcpPort)
 	if err != nil {
 		logger.Error("An error occured on creating tcp server", "Error", err)
 		os.Exit(1)
 	}
 
-	defer listner.Close()
 	logger.Info("TCP server is up and running")
-
+	defer listner.Close()
+	close(ready)
 	// Listening to the connections
 	for {
 		conn, err := listner.Accept()

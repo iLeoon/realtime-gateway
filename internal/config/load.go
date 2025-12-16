@@ -1,48 +1,17 @@
 package config
 
 import (
-	"errors"
-	"fmt"
-	"os"
-
-	"github.com/joho/godotenv"
-)
-
-// the entry point for all the config variables
-var (
-	ErrLoadEnvFile = errors.New("can't find the env file")
-	ErrRetriveKey  = errors.New("no key with that name exists")
+	"github.com/caarlos0/env/v10"
 )
 
 func Load() (*Config, error) {
 
-	err := godotenv.Load(".env")
-	if err != nil {
-		return nil, fmt.Errorf("%w:%v", ErrLoadEnvFile, err)
-	}
+	cfg := &Config{}
 
-	c := &Config{}
-	c.TCP.TcpPort, err = getEnv("TCP_SERVER_PORT")
-	if err != nil {
+	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
 
-	c.Websocket.WsPort, err = getEnv("WEBSOKCET_SERVER_PORT")
-	if err != nil {
-		return nil, err
-	}
-	c.HttpServer.HttpPort, err = getEnv("HTTP_PORT")
-	if err != nil {
-		return nil, err
-	}
+	return cfg, nil
 
-	return c, nil
-}
-
-func getEnv(key string) (string, error) {
-
-	if val, exists := os.LookupEnv(key); exists {
-		return val, nil
-	}
-	return "", fmt.Errorf("%w:%v", ErrRetriveKey, key)
 }

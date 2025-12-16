@@ -6,16 +6,31 @@ type Config struct {
 	TCP
 	Websocket
 	HttpServer
+	GoogleOAuth
+	PostgreSQL
 }
 
 type TCP struct {
-	TcpPort string
+	TcpPort string `env:"TCP_SERVER_PORT"`
 }
 
 type Websocket struct {
-	WsPort string
+	WsPort string `env:"WEBSOKCET_SERVER_PORT"`
 }
 
 type HttpServer struct {
-	HttpPort string
+	HttpPort string `env:"HTTP_PORT"`
+}
+
+type GoogleOAuth struct {
+	GoogleClientID     string `env:"GOOGLE_CLIENTID"`
+	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
+}
+
+type PostgreSQL struct {
+	DBHost     string `env:"POSTGRES_HOST"`
+	DBPort     int    `env:"POSTGRES_PORT"`
+	DBUser     string `env:"POSTGRES_USER"`
+	DBPassword string `env:"POSTGRES_PASSWORD"`
+	DBName     string `env:"POSTGRES_DATABASE"`
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/internal/db/src"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver"
 	"github.com/iLeoon/realtime-gateway/internal/router"
 	"github.com/iLeoon/realtime-gateway/internal/tcp"
@@ -13,17 +15,30 @@ import (
 )
 
 func main() {
+	// A ready channel that
+	tcpServerReady := make(chan struct{})
 	// Load the configuration variables.
 	conf, err := config.Load()
-
 	// Start the logger.
 	logger.Initlogger()
+
+	// Connect to database.
+	db, dbErr := src.Connect(conf)
+
+	if dbErr != nil {
+		logger.Error("Error on trying to connect to the database", "Error", dbErr)
+		os.Exit(1)
+	}
+	fmt.Println(db)
+
 	if err != nil {
 		logger.Error("can't load configuration", "Error", err)
 		os.Exit(1)
 	}
 	// Run the TCP server.
-	go tcp.InitTCPServer(conf)
+	go tcp.InitTCPServer(conf, tcpServerReady)
+
+	<-tcpServerReady
 
 	//Start new WebSocket server instance.
 	wsServer := websocket.NewWsServer()
@@ -33,7 +48,12 @@ func main() {
 
 	// Start a new TCP client to connect between TCP server
 	// and WebSocket gateway.
-	tcpClient := tcpclient.NewTCPClient(conf, router, wsServer.SignalToWs)
+	tcpClient, err := tcpclient.NewTCPClient(conf, router, wsServer.SignalToWs)
+
+	if err != nil {
+		logger.Error("Can't connect to the tcp server", "Error", err)
+		os.Exit(1)
+	}
 
 	go httpserver.Start(conf)
 
