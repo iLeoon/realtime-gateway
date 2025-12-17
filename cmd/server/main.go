@@ -1,11 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/internal/db/src"
+	"github.com/iLeoon/realtime-gateway/internal/db"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver"
 	"github.com/iLeoon/realtime-gateway/internal/router"
 	"github.com/iLeoon/realtime-gateway/internal/tcp"
@@ -23,13 +22,12 @@ func main() {
 	logger.Initlogger()
 
 	// Connect to database.
-	db, dbErr := src.Connect(conf)
+	db, dbErr := db.Connect(conf)
 
 	if dbErr != nil {
 		logger.Error("Error on trying to connect to the database", "Error", dbErr)
 		os.Exit(1)
 	}
-	fmt.Println(db)
 
 	if err != nil {
 		logger.Error("can't load configuration", "Error", err)
@@ -55,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	go httpserver.Start(conf)
+	go httpserver.Start(conf, db)
 
 	// Start the gateway.
 	websocket.Start(wsServer, conf, tcpClient)

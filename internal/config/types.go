@@ -23,8 +23,9 @@ type HttpServer struct {
 }
 
 type GoogleOAuth struct {
-	GoogleClientID     string `env:"GOOGLE_CLIENTID"`
+	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
+	RedirectURL        string `env:"REDIRECT_URL"`
 }
 
 type PostgreSQL struct {

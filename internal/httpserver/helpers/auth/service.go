@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/models"
@@ -13,41 +13,48 @@ import (
 type AuthServiceInterface interface {
 	LoginUser(string) string
 	GoogleClient() *oauth2.Config
-	HandleToken(*idtoken.Payload)
+	HandleToken(*idtoken.Payload, context.Context) error
 }
 
 type AuthService struct {
 	config *config.Config
+	repo   AuthRepositpryInterface
 }
 
-func NewAuthService(config *config.Config) *AuthService {
+func NewAuthService(config *config.Config, repo AuthRepositpryInterface) *AuthService {
 	return &AuthService{
 		config: config,
+		repo:   repo,
 	}
 }
 
 func (as *AuthService) LoginUser(verifier string) string {
-
 	url := as.GoogleClient().AuthCodeURL("state", oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	return url
 
 }
 
-func (as *AuthService) HandleToken(payload *idtoken.Payload) {
+func (as *AuthService) HandleToken(payload *idtoken.Payload, ctx context.Context) error {
 
-	googleUser := models.GoogleUser{
-		Email: payload.Claims["email"].(string),
-		Name:  payload.Claims["name"].(string),
+	User := models.ProviderUser{
+		ProviderID: payload.Subject,
+		Email:      payload.Claims["email"].(string),
+		Name:       payload.Claims["name"].(string),
+		Provider:   "google",
 	}
+	err := as.repo.HandleLogins(ctx, User)
 
-	fmt.Println(googleUser)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (as *AuthService) GoogleClient() *oauth2.Config {
 	GoogleClient := &oauth2.Config{
 		ClientID:     as.config.GoogleClientID,
 		ClientSecret: as.config.GoogleClientSecret,
-		RedirectURL:  "http://localhost:7000/auth/redirect/oauth/google/callback",
+		RedirectURL:  as.config.RedirectURL,
 		Scopes:       []string{"openid", "email", "profile"},
 		Endpoint:     google.Endpoint,
 	}

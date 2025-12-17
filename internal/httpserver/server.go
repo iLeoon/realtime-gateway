@@ -5,21 +5,17 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/auth"
-	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/users"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/routes"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Start(conf *config.Config) {
+func Start(conf *config.Config, db *pgxpool.Pool) {
 	mux := http.NewServeMux()
 
-	userRepo := users.NewUserRepo("hello world")
+	authRepo := auth.NewAuthRepository(db)
+	authService := auth.NewAuthService(conf, authRepo)
 
-	userService := users.NewUserService(userRepo.Database)
-
-	authService := auth.NewAuthService(conf)
-
-	mux.Handle("/user/", routes.UserRoute(userService))
 	mux.Handle("/auth/", routes.AuthRoute(authService))
 
 	logger.Info("Listen to http requests")

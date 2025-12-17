@@ -1,4 +1,4 @@
-package src
+package db
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Connect(conf *config.Config) (*pgx.Conn, error) {
+func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 
 	var (
 		host     = conf.DBHost
@@ -23,12 +23,17 @@ func Connect(conf *config.Config) (*pgx.Conn, error) {
 		"password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
-	conn, err := pgx.Connect(context.Background(), psqlInfo)
+	parseConfig, parseErr := pgxpool.ParseConfig(psqlInfo)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), parseConfig)
+
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close(context.Background())
 
-	logger.Info("Database connected successfully")
-	return conn, nil
+	logger.Info("Database pool connection is ready.")
+	return pool, nil
 }

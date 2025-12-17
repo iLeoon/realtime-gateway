@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS providers(
 	provider TEXT NOT NULL DEFAULT 'google',
 	provider_user_id TEXT NOT NULL,
 	user_id INT NOT NULL,
-	created_at TIMESTAMP NOT NULL,
+	created_at TIMESTAMP DEFAULT NOW(),
 	
 	PRIMARY KEY (provider, provider_user_id),
 	FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
