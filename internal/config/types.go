@@ -8,6 +8,7 @@ type Config struct {
 	HttpServer
 	GoogleOAuth
 	PostgreSQL
+	JWT
 }
 
 type TCP struct {
@@ -34,4 +35,8 @@ type PostgreSQL struct {
 	DBUser     string `env:"POSTGRES_USER"`
 	DBPassword string `env:"POSTGRES_PASSWORD"`
 	DBName     string `env:"POSTGRES_DATABASE"`
+}
+
+type JWT struct {
+	JwtSecretKey string `env:"JWT_SECRET_KEY,required"`
 }

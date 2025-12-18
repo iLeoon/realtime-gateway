@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Main entry for our pool connection.
 func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 
 	var (

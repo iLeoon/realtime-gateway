@@ -6,11 +6,12 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/users"
 )
 
-func UserRoute(service users.UserServiceInterface) *http.ServeMux {
+func UserRoute() *http.ServeMux {
 
 	userMux := http.NewServeMux()
+
 	userMux.HandleFunc("GET /user/getuser", func(w http.ResponseWriter, r *http.Request) {
-		users.GetUser(w, r, service)
+		users.GetUser(w, r)
 	})
 	return userMux
 }

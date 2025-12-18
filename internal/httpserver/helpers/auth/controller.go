@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/json"
 	"net/http"
 
+	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
@@ -10,38 +13,63 @@ import (
 
 func LoginHandler(w http.ResponseWriter, r *http.Request, authService AuthServiceInterface) {
 	verifier := oauth2.GenerateVerifier()
-	url := authService.LoginUser(verifier)
+	stateString := rand.Text()
+
+	url := authService.LoginUser(verifier, stateString)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pkce_verifier",
 		HttpOnly: true,
 		Value:    verifier,
 		Path:     "/",
-		MaxAge:   300,
+		MaxAge:   0,
+		SameSite: http.SameSiteStrictMode,
 	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "state",
 		HttpOnly: true,
-		Value:    verifier,
+		Value:    stateString,
 		Path:     "/",
-		MaxAge:   300,
+		MaxAge:   0,
+		SameSite: http.SameSiteStrictMode,
 	})
 
 	http.Redirect(w, r, url, http.StatusFound)
 
 }
 
-func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService AuthServiceInterface) {
+func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService AuthServiceInterface, jwt jwt_.JwtInterface) {
 
 	code := r.URL.Query().Get("code")
-	cookie, cookieReadErr := r.Cookie("pkce_verifier")
-	if cookieReadErr != nil {
-		http.Error(w, "Missing PKCE verifier", http.StatusBadRequest)
+	state := r.URL.Query().Get("state")
+
+	if code == "" || state == "" {
+		logger.Error("Missing code and state in the request")
+		http.Error(w, "Missing required values", http.StatusBadRequest)
 		return
 	}
 
-	token, err := authService.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(cookie.Value))
+	verifier, err := r.Cookie("pkce_verifier")
+	if err != nil {
+		logger.Error("Missing the verifier cookie in the request.")
+		http.Error(w, "Invalid oAuth state", http.StatusBadRequest)
+		return
+	}
+
+	stateCookie, err := r.Cookie("state")
+	if err != nil {
+		logger.Error("Missing the state cookie in the request.")
+		http.Error(w, "Invalid oAuth state", http.StatusBadRequest)
+		return
+	}
+
+	if stateCookie.Value != state {
+		http.Error(w, "Invalid oAuth state", http.StatusBadRequest)
+		return
+	}
+
+	token, err := authService.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
 		logger.Error("error on exchanhing the tokem", "Error", err)
 		http.Error(w, "Exchange the tokens has failed", http.StatusInternalServerError)
@@ -63,10 +91,19 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 		return
 	}
 
-	handlerErr := authService.HandleToken(payload, r.Context())
+	userID, handlerErr := authService.HandleToken(payload, r.Context())
 	if handlerErr != nil {
-		logger.Error("error", "error", err)
+		logger.Error("couldn't create or retrive the user", "error", err)
 		return
 	}
+	jwtToken := jwt.GenerateJWT(userID)
+
+	w.Header().Set("Authorization", "Bearer "+jwtToken)
+	w.WriteHeader(http.StatusOK)
+
+	// For testing purposes
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": jwtToken,
+	})
 
 }

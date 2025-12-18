@@ -11,9 +11,9 @@ import (
 )
 
 type AuthServiceInterface interface {
-	LoginUser(string) string
+	LoginUser(string, string) string
 	GoogleClient() *oauth2.Config
-	HandleToken(*idtoken.Payload, context.Context) error
+	HandleToken(*idtoken.Payload, context.Context) (int, error)
 }
 
 type AuthService struct {
@@ -28,13 +28,13 @@ func NewAuthService(config *config.Config, repo AuthRepositpryInterface) *AuthSe
 	}
 }
 
-func (as *AuthService) LoginUser(verifier string) string {
-	url := as.GoogleClient().AuthCodeURL("state", oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
+func (as *AuthService) LoginUser(verifier string, state string) string {
+	url := as.GoogleClient().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	return url
 
 }
 
-func (as *AuthService) HandleToken(payload *idtoken.Payload, ctx context.Context) error {
+func (as *AuthService) HandleToken(payload *idtoken.Payload, ctx context.Context) (int, error) {
 
 	User := models.ProviderUser{
 		ProviderID: payload.Subject,
@@ -42,12 +42,12 @@ func (as *AuthService) HandleToken(payload *idtoken.Payload, ctx context.Context
 		Name:       payload.Claims["name"].(string),
 		Provider:   "google",
 	}
-	err := as.repo.HandleLogins(ctx, User)
+	userID, err := as.repo.HandleLogins(ctx, User)
 
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return userID, nil
 }
 
 func (as *AuthService) GoogleClient() *oauth2.Config {
