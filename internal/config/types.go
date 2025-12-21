@@ -39,4 +39,5 @@ type PostgreSQL struct {
 
 type JWT struct {
 	JwtSecretKey string `env:"JWT_SECRET_KEY,required"`
+	JwtIssure    string `env:"JWT_ISSUER,required"`
 }

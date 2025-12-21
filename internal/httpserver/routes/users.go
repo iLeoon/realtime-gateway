@@ -10,7 +10,7 @@ func UserRoute() *http.ServeMux {
 
 	userMux := http.NewServeMux()
 
-	userMux.HandleFunc("GET /user/getuser", func(w http.ResponseWriter, r *http.Request) {
+	userMux.HandleFunc("GET /users/getuser", func(w http.ResponseWriter, r *http.Request) {
 		users.GetUser(w, r)
 	})
 	return userMux

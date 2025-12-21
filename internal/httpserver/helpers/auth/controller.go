@@ -71,7 +71,7 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 
 	token, err := authService.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
-		logger.Error("error on exchanhing the tokem", "Error", err)
+		logger.Error("error on exchanging the token", "Error", err)
 		http.Error(w, "Exchange the tokens has failed", http.StatusInternalServerError)
 		return
 	}
@@ -84,20 +84,27 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 		return
 	}
 
-	payload, idValidateErr := idtoken.Validate(r.Context(), rawIDToken, authService.GoogleClient().ClientID)
-	if idValidateErr != nil {
+	payload, err := idtoken.Validate(r.Context(), rawIDToken, authService.GoogleClient().ClientID)
+	if err != nil {
 		http.Error(w, "Invalid token", http.StatusInternalServerError)
-		logger.Error("Error", idValidateErr)
+		logger.Error("Error", err)
 		return
 	}
 
-	userID, handlerErr := authService.HandleToken(payload, r.Context())
-	if handlerErr != nil {
+	userID, err := authService.HandleToken(payload, r.Context())
+	if err != nil {
 		logger.Error("couldn't create or retrive the user", "error", err)
 		return
 	}
-	jwtToken := jwt.GenerateJWT(userID)
 
+	jwtToken, err := jwt.GenerateJWT(userID)
+	if err != nil {
+		logger.Error("can't generate jwt token", "Error", err)
+		http.Error(w, "error on authorization flow", http.StatusBadRequest)
+		return
+	}
+
+	// Set the jwt token in the header.
 	w.Header().Set("Authorization", "Bearer "+jwtToken)
 	w.WriteHeader(http.StatusOK)
 

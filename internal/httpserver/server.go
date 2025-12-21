@@ -6,6 +6,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/auth"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
+	"github.com/iLeoon/realtime-gateway/internal/httpserver/middelware"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/routes"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +20,7 @@ func Start(conf *config.Config, db *pgxpool.Pool) {
 	authService := auth.NewAuthService(conf, authRepo)
 
 	mux.Handle("/auth/", routes.AuthRoute(authService, jwtService))
+	mux.Handle("/users/", middelware.AuthGuard(routes.UserRoute(), jwtService))
 	logger.Info("Listening to http requests")
 	http.ListenAndServe(conf.HttpPort, mux)
 }
