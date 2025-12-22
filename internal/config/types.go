@@ -22,6 +22,7 @@ type GoogleOAuth struct {
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
 	RedirectURL        string `env:"REDIRECT_URL"`
+	CallBackPath       string `env:"CALLBACK_PATH,required"`
 }
 
 type PostgreSQL struct {

@@ -3,11 +3,12 @@ package routes
 import (
 	"net/http"
 
+	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/auth"
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
 )
 
-func AuthRoute(service auth.AuthServiceInterface, jwt jwt_.JwtInterface) *http.ServeMux {
+func AuthRoute(service auth.AuthServiceInterface, jwt jwt_.JwtInterface, conf *config.Config) *http.ServeMux {
 
 	authMux := http.NewServeMux()
 
@@ -15,7 +16,7 @@ func AuthRoute(service auth.AuthServiceInterface, jwt jwt_.JwtInterface) *http.S
 		auth.LoginHandler(w, r, service)
 	})
 
-	authMux.HandleFunc("GET /auth/redirect/oauth/google/callback/", func(w http.ResponseWriter, r *http.Request) {
+	authMux.HandleFunc("GET "+conf.CallBackPath, func(w http.ResponseWriter, r *http.Request) {
 		auth.RedirectURLHandler(w, r, service, jwt)
 	})
 

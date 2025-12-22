@@ -19,7 +19,7 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	authRepo := auth.NewAuthRepository(db)
 	authService := auth.NewAuthService(conf, authRepo)
 
-	mux.Handle("/auth/", routes.AuthRoute(authService, jwtService))
+	mux.Handle("/auth/", routes.AuthRoute(authService, jwtService, conf))
 	mux.Handle("/users/", middelware.AuthGuard(routes.UserRoute(), jwtService))
 	mux.Handle("/ws", middelware.AuthGuard(ws, jwtService))
 
