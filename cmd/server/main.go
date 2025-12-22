@@ -53,9 +53,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	go httpserver.Start(conf, db)
+	// Retrive the ws handler and pass it to the http server.
+	wsHandler := wsServer.Start(conf, tcpClient)
 
-	// Start the gateway.
-	websocket.Start(wsServer, conf, tcpClient)
+	httpserver.Start(conf, db, wsHandler)
 
 }

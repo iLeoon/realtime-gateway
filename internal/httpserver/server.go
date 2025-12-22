@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Start(conf *config.Config, db *pgxpool.Pool) {
+func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	mux := http.NewServeMux()
 	jwtService := jwt_.NewJWTServic(conf)
 
@@ -21,6 +21,9 @@ func Start(conf *config.Config, db *pgxpool.Pool) {
 
 	mux.Handle("/auth/", routes.AuthRoute(authService, jwtService))
 	mux.Handle("/users/", middelware.AuthGuard(routes.UserRoute(), jwtService))
+	mux.Handle("/ws", middelware.AuthGuard(ws, jwtService))
+
+	logger.Info("The websocekt server is up and running..")
 	logger.Info("Listening to http requests")
 	http.ListenAndServe(conf.HttpPort, mux)
 }

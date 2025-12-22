@@ -1,11 +1,11 @@
 package middelware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
 	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
+	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 )
 
@@ -41,7 +41,7 @@ func AuthGuard(next http.Handler, jwt jwt_.JwtInterface) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "UserID", userID)
+		ctx := ctx.SetUserIDCtx(r.Context(), userID)
 		logger.Info("Attached the userID to the request", "UserID", userID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))

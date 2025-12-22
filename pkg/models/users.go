@@ -6,7 +6,3 @@ type ProviderUser struct {
 	Name       string
 	Provider   string
 }
-
-type User struct {
-	user_id int
-}

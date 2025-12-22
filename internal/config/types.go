@@ -4,7 +4,6 @@ package config
 
 type Config struct {
 	TCP
-	Websocket
 	HttpServer
 	GoogleOAuth
 	PostgreSQL
@@ -13,10 +12,6 @@ type Config struct {
 
 type TCP struct {
 	TcpPort string `env:"TCP_SERVER_PORT"`
-}
-
-type Websocket struct {
-	WsPort string `env:"WEBSOKCET_SERVER_PORT"`
 }
 
 type HttpServer struct {

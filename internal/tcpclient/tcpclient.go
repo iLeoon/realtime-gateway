@@ -34,9 +34,9 @@ type tcpClient struct {
 }
 
 // NewTcpClient establishes the TCP connection between the WebSocket
-// gateway and the TCP engine. This function is invoked from the
-// WebSocket server during startup to create the bride
-// and be to send/receive messages.
+// gateway and the TCP engine. This function create the bridge
+// between the websocket gateway and tcp server
+// to send/receive messages.
 func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*tcpClient, error) {
 	conn, err := net.Dial("tcp", conf.TCP.TcpPort)
 	if err != nil {
@@ -44,7 +44,7 @@ func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*t
 
 	}
 
-	logger.Info("The websocket gateway successfully connected to the tcp server")
+	logger.Info("The tcp client successfully established a connection between websocket gateway and tcp server")
 
 	client := &tcpClient{
 		conn:   conn,
@@ -56,7 +56,7 @@ func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*t
 
 }
 
-// ReadFromGateway handles incoming messages from the browser/WebSocket
+// ReadFromGateway handles incoming messages from the browser/WebSocket gateway
 // client. It receives raw JSON payloads, unmarshals them into the
 // ClientPayload structure, and uses the opcode to determine which internal
 // packet type to construct.

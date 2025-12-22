@@ -1,10 +1,13 @@
 package websocket
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
@@ -21,12 +24,15 @@ type wsServer struct {
 
 // Create new websocket server
 func NewWsServer() *wsServer {
-	return &wsServer{
+	s := &wsServer{
 		clients:    make(map[uint32]*Client),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		SignalToWs: make(chan uint32),
 	}
+	go s.run()
+	return s
+
 }
 
 // Upgrading the http protocol into a websocket protocol
@@ -36,11 +42,25 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// Start constructs and returns an http.Handler responsible for handling
+// WebSocket upgrade requests. It upgrades incoming HTTP requests,
+// creates WebSocket clients, and registers them with the gateway.
+func (s *wsServer) Start(conf *config.Config, tcp session.Session) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.initServer(w, r, tcp)
+	})
+}
+
 // InitServerFunc upgrades the incoming HTTP request to a WebSocket
 // connection, initializes a new client session using the provided Session
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
-func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient session.Session) {
+func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, tcpClient session.Session) {
+
+	userID, ok := ctx.GetUserIDCtx(r.Context())
+	fmt.Println(ok)
+	fmt.Println(userID)
+
 	//the actual websocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -55,8 +75,7 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient s
 		tcpClient:    tcpClient,
 		ConnectionID: rand.Uint32(),
 	}
-
-	client.server.register <- client
+	s.register <- client
 	logger.Info("A new client has been connected to the server")
 
 	go client.readPump()
@@ -64,6 +83,8 @@ func initServer(s *wsServer, w http.ResponseWriter, r *http.Request, tcpClient s
 
 }
 
+// run register/unregister a connection to the clients map
+// and signal to the ws when an error occures to disconnect the user.
 func (s *wsServer) run() {
 	for {
 		select {
