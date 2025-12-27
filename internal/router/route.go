@@ -1,9 +1,9 @@
 package router
 
 import (
-	"github.com/iLeoon/realtime-gateway/internal/websocket"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/ws"
 )
 
 // Router forwards decoded packets from the TCP engine to the appropriate
@@ -11,13 +11,13 @@ import (
 // maintained by the WebSocket server and uses it to deliver outbound
 // messages to their intended recipients.
 type Router struct {
-	clients *map[uint32]*websocket.Client
+	router ws.WsController
 }
 
 // Create a new router.
-func NewRouter(clients *map[uint32]*websocket.Client) *Router {
+func NewRouter(server ws.WsController) *Router {
 	return &Router{
-		clients: clients,
+		router: server,
 	}
 }
 
@@ -35,9 +35,9 @@ func (r *Router) Route(f *protocol.Frame) {
 // WebSocket recipient.
 func (r *Router) handleResponseMessage(pkt *packets.ResponseMessagePacket) {
 	recipient := pkt.ToConnectionID
+	client := r.router.GetClient(recipient)
 
-	client := (*r.clients)[recipient]
-
-	client.Send <- []byte(pkt.ResContent)
+	message := []byte(pkt.ResContent)
+	client.SendMessage(recipient, message)
 
 }

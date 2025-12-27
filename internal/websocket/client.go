@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,10 +26,11 @@ const (
 // We funnel all outgoing messages into `client.send`.
 type Client struct {
 	conn         *websocket.Conn
-	Send         chan []byte
+	send         chan []byte
 	server       *wsServer
 	tcpClient    session.Session
-	ConnectionID uint32
+	connectionID uint32
+	once         sync.Once
 }
 
 func (c *Client) readPump() {
@@ -43,7 +45,7 @@ func (c *Client) readPump() {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Info("Client disconnected", "ClientID", c.ConnectionID)
+				logger.Info("Client disconnected", "ClientID", c.connectionID)
 			}
 
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -52,7 +54,7 @@ func (c *Client) readPump() {
 			break
 		}
 		// Forward the messages to ReadFromGateway with the proper data.
-		readErr := c.tcpClient.ReadFromGateway(message, c.ConnectionID)
+		readErr := c.tcpClient.ReadFromGateway(message, c.connectionID)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
 			break
@@ -70,7 +72,7 @@ func (c *Client) writePump() {
 
 	for {
 		select {
-		case message, ok := <-c.Send:
+		case message, ok := <-c.send:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -94,6 +96,33 @@ func (c *Client) writePump() {
 				return
 			}
 		}
+
 	}
 
+}
+
+func (c *Client) SendMessage(connectionID uint32, messages []byte) bool {
+	toClient := c.server.clients[connectionID]
+	select {
+	case toClient.send <- messages:
+		return true
+
+	default:
+		logger.Error("The channel is overflow")
+		toClient.Close()
+		return false
+
+	}
+}
+
+func (c *Client) Close() {
+	c.once.Do(func() {
+		close(c.send)
+		c.conn.Close()
+		delete(c.server.clients, c.connectionID)
+	})
+}
+
+func (c *Client) GetConnectionID() uint32 {
+	return c.connectionID
 }

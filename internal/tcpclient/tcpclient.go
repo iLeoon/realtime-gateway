@@ -10,6 +10,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/ws"
 )
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -29,7 +30,7 @@ import (
 type tcpClient struct {
 	conn         net.Conn
 	router       *router.Router // Router routes the data coming from Tcp server to websocket gateway.
-	c            chan uint32
+	controller   ws.WsController
 	connectionID uint32
 }
 
@@ -37,7 +38,7 @@ type tcpClient struct {
 // gateway and the TCP engine. This function create the bridge
 // between the websocket gateway and tcp server
 // to send/receive messages.
-func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*tcpClient, error) {
+func NewTCPClient(conf *config.Config, router *router.Router, controller ws.WsController) (*tcpClient, error) {
 	conn, err := net.Dial("tcp", conf.TCP.TcpPort)
 	if err != nil {
 		return nil, err
@@ -47,9 +48,9 @@ func NewTCPClient(conf *config.Config, router *router.Router, c chan uint32) (*t
 	logger.Info("The tcp client successfully established a connection between websocket gateway and tcp server")
 
 	client := &tcpClient{
-		conn:   conn,
-		router: router,
-		c:      c,
+		conn:       conn,
+		router:     router,
+		controller: controller,
 	}
 	go client.ReadFromServer()
 	return client, nil
@@ -112,7 +113,7 @@ func (t *tcpClient) ReadFromServer() {
 		// Decode the frame.
 		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
-			t.c <- t.connectionID
+			t.controller.SignalToWs(t.connectionID)
 			logger.Error("Invalid incoming data from tcp server", "Error", err)
 			return
 		}

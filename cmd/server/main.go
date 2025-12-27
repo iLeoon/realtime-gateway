@@ -14,10 +14,12 @@ import (
 )
 
 func main() {
-	// A ready channel that
+	// A ready channel that unblocks once the tcp server is up and running.
 	tcpServerReady := make(chan struct{})
+
 	// Load the configuration variables.
 	conf, err := config.Load()
+
 	// Start the logger.
 	logger.Initlogger()
 
@@ -42,11 +44,11 @@ func main() {
 	wsServer := websocket.NewWsServer()
 
 	// Start new router instance and pass the WebSocket server connections map.
-	router := router.NewRouter(wsServer.Clients())
+	router := router.NewRouter(wsServer)
 
 	// Start a new TCP client to connect between TCP server
 	// and WebSocket gateway.
-	tcpClient, err := tcpclient.NewTCPClient(conf, router, wsServer.SignalToWs)
+	tcpClient, err := tcpclient.NewTCPClient(conf, router, wsServer)
 
 	if err != nil {
 		logger.Error("Can't connect to the tcp server", "Error", err)
