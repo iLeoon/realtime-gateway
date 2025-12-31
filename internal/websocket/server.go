@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/realtime-gateway/internal/config"
@@ -72,17 +73,20 @@ func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, tcpClient 
 	}
 
 	client := &Client{
-		conn:         conn,
-		send:         make(chan []byte, 256),
-		server:       s,
-		tcpClient:    tcpClient,
-		connectionID: rand.Uint32(),
+		conn:          conn,
+		send:          make(chan []byte, 256),
+		server:        s,
+		tcpClient:     tcpClient,
+		burstyLimiter: make(chan time.Time, 3),
+		connectionID:  rand.Uint32(),
+		done:          make(chan struct{}),
 	}
 	s.register <- client
 	logger.Info("A new client has been connected to the server")
 
 	go client.readPump()
 	go client.writePump()
+	go client.limiterFaucet()
 
 }
 
@@ -97,36 +101,42 @@ func (s *wsServer) run() {
 			//Add the connectionID to the tcp server map
 			err := client.tcpClient.OnConnect(client.connectionID)
 			if err != nil {
-				logger.Error("Error on encoding the connect packt", "Error", err)
-				return
+				logger.Error("Couldn't register this client", "ClientID", "Error", client.connectionID, err)
+				delete(s.clients, client.connectionID)
+				continue
 			}
+
 		case client := <-s.unregister:
 			if _, ok := s.clients[client.connectionID]; ok {
 				//Remove the connectionID from the websocket map
 				delete(s.clients, client.connectionID)
 				//Remove the connectionID from the tcp server map
 				err := client.tcpClient.DisConnect(client.connectionID)
+
 				if err != nil {
-					logger.Error("Error on encoding the connect packt", "Error", err)
-					return
+					logger.Error("Couldn't unregister this client", "ClientID", "Error", client.connectionID, err)
 				}
+
 				//Close the channel
 				close(client.send)
+				close(client.done)
 			}
 		case id := <-s.signalToWs:
-			client := s.clients[id]
-			delete(s.clients, client.connectionID)
-			close(client.send)
-			client.conn.Close()
+			client, ok := s.clients[id]
+			if ok {
+				s.unregister <- client
+			}
 
 		}
 	}
 }
 
-func (s *wsServer) GetClient(connectionID uint32) ws.WsClient {
+func (s *wsServer) GetClient(connectionID uint32) (ws.WsClient, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.clients[connectionID]
+	client, ok := s.clients[connectionID]
+	return client, ok
+
 }
 
 func (s *wsServer) SignalToWs(connectionID uint32) {

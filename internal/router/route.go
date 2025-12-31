@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/ws"
@@ -35,9 +36,12 @@ func (r *Router) Route(f *protocol.Frame) {
 // WebSocket recipient.
 func (r *Router) handleResponseMessage(pkt *packets.ResponseMessagePacket) {
 	recipient := pkt.ToConnectionID
-	client := r.router.GetClient(recipient)
+	client, ok := r.router.GetClient(recipient)
+	if !ok {
+		logger.Error("couldn't find the client")
+		return
+	}
 
 	message := []byte(pkt.ResContent)
-	client.SendMessage(recipient, message)
-
+	client.SendMessage(message)
 }

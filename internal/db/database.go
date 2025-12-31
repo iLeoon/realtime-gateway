@@ -30,8 +30,11 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 	}
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), parseConfig)
-
 	if err != nil {
+		return nil, err
+	}
+
+	if err := pool.Ping(context.Background()); err != nil {
 		return nil, err
 	}
 

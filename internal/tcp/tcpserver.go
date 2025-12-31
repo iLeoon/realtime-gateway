@@ -82,7 +82,7 @@ func (t *tcpServer) handleConn() {
 		case *packets.ConnectPacket:
 			t.registerConnectionIDs(p)
 		case *packets.DisconnectPacket:
-			t.unRegisterConnectionIDs(p)
+			t.unregisterConnectionIDs(p)
 		case *packets.SendMessagePacket:
 			err := t.handleSendMessageReq(p)
 			if err != nil {
@@ -128,6 +128,6 @@ func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map
-func (t *tcpServer) unRegisterConnectionIDs(pkt *packets.DisconnectPacket) {
+func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket) {
 	delete(t.clients, pkt.ConnectionID)
 }

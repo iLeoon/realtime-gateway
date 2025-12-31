@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,12 +24,13 @@ const (
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
 type Client struct {
-	conn         *websocket.Conn
-	send         chan []byte
-	server       *wsServer
-	tcpClient    session.Session
-	connectionID uint32
-	once         sync.Once
+	conn          *websocket.Conn
+	send          chan []byte
+	server        *wsServer
+	tcpClient     session.Session
+	connectionID  uint32
+	burstyLimiter chan time.Time
+	done          chan struct{}
 }
 
 func (c *Client) readPump() {
@@ -42,6 +42,11 @@ func (c *Client) readPump() {
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(appData string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
+		_, ok := <-c.burstyLimiter
+		if !ok {
+			return
+		}
+
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -81,7 +86,6 @@ func (c *Client) writePump() {
 
 			msg, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-
 				logger.Error("An error while tring to write the message", "Error", err)
 			}
 			msg.Write(message)
@@ -101,26 +105,37 @@ func (c *Client) writePump() {
 
 }
 
-func (c *Client) SendMessage(connectionID uint32, messages []byte) bool {
-	toClient := c.server.clients[connectionID]
-	select {
-	case toClient.send <- messages:
-		return true
+func (c *Client) limiterFaucet() {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer func() {
+		ticker.Stop()
+		close(c.burstyLimiter)
+	}()
+	for {
+		select {
+		case t := <-ticker.C:
+			select {
+			case c.burstyLimiter <- t:
+			default:
+			}
 
-	default:
-		logger.Error("The channel is overflow")
-		toClient.Close()
-		return false
-
+		case <-c.done:
+			return
+		}
 	}
 }
 
-func (c *Client) Close() {
-	c.once.Do(func() {
-		close(c.send)
-		c.conn.Close()
-		delete(c.server.clients, c.connectionID)
-	})
+func (c *Client) SendMessage(message []byte) {
+	select {
+	case c.send <- message:
+		return
+
+	default:
+		logger.Error("backpressure violation")
+		c.server.unregister <- c
+		return
+
+	}
 }
 
 func (c *Client) GetConnectionID() uint32 {
