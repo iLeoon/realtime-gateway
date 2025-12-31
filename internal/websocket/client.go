@@ -1,6 +1,8 @@
 package websocket
 
 import (
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -31,22 +33,18 @@ type Client struct {
 	connectionID  uint32
 	burstyLimiter chan time.Time
 	done          chan struct{}
+	once          sync.Once
 }
 
 func (c *Client) readPump() {
 	defer func() {
-		c.server.unregister <- c
+		c.server.unregister <- unregisterRequest{client: c, reason: "Client error"}
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(appData string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
-		_, ok := <-c.burstyLimiter
-		if !ok {
-			return
-		}
-
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -58,6 +56,13 @@ func (c *Client) readPump() {
 			}
 			break
 		}
+
+		// Add a throttle for reading messages.
+		_, ok := <-c.burstyLimiter
+		if !ok {
+			return
+		}
+
 		// Forward the messages to ReadFromGateway with the proper data.
 		readErr := c.tcpClient.ReadFromGateway(message, c.connectionID)
 		if readErr != nil {
@@ -106,7 +111,7 @@ func (c *Client) writePump() {
 }
 
 func (c *Client) limiterFaucet() {
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(2 * time.Second)
 	defer func() {
 		ticker.Stop()
 		close(c.burstyLimiter)
@@ -126,13 +131,14 @@ func (c *Client) limiterFaucet() {
 }
 
 func (c *Client) SendMessage(message []byte) {
+	fmt.Println(len(c.send))
 	select {
 	case c.send <- message:
 		return
 
 	default:
 		logger.Error("backpressure violation")
-		c.server.unregister <- c
+		c.server.unregister <- unregisterRequest{client: c, reason: "Buffer full(Backpressure)"}
 		return
 
 	}
@@ -140,4 +146,12 @@ func (c *Client) SendMessage(message []byte) {
 
 func (c *Client) GetConnectionID() uint32 {
 	return c.connectionID
+}
+
+func (c *Client) Terminate() {
+	c.once.Do(func() {
+		c.conn.Close()
+		close(c.send)
+		close(c.done)
+	})
 }
