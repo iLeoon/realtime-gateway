@@ -6,6 +6,11 @@ type WsClient interface {
 }
 
 type WsController interface {
-	GetClient(uint32) (WsClient, bool)
-	SignalToWs(uint32)
+	// GetClient(string) (WsClient, bool)
+	SignalToWs(SignalToWsReq)
+}
+
+type SignalToWsReq struct {
+	UserID       string
+	ConnectionID uint32
 }

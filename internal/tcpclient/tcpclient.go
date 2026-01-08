@@ -10,6 +10,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/session"
 	"github.com/iLeoon/realtime-gateway/pkg/ws"
 )
 
@@ -29,17 +30,33 @@ import (
 //	TCP Engine  → DecodeFrame → Route Packet → Handle Response → WebSocket Client
 type tcpClient struct {
 	conn         net.Conn
-	router       *router.Router // Router routes the data coming from Tcp server to websocket gateway.
+	conf         *config.Config
+	router       *router.Router
+	connectionID uint32 // the requester connection ID
+	userID       string // the requester user ID
 	controller   ws.WsController
-	connectionID uint32
 }
 
-// NewTcpClient establishes the TCP connection between the WebSocket
+type tcpClientFactory struct {
+	conf       *config.Config
+	router     *router.Router // Router routes the data coming from Tcp server to websocket gateway.
+	controller ws.WsController
+}
+
+func NewFactory(config *config.Config, router *router.Router, controller ws.WsController) *tcpClientFactory {
+	return &tcpClientFactory{
+		conf:       config,
+		router:     router,
+		controller: controller,
+	}
+}
+
+// NewTCPClient establishes the TCP connection between the WebSocket
 // gateway and the TCP engine. This function create the bridge
 // between the websocket gateway and tcp server
 // to send/receive messages.
-func NewTCPClient(conf *config.Config, router *router.Router, controller ws.WsController) (*tcpClient, error) {
-	conn, err := net.Dial("tcp", conf.TCP.TcpPort)
+func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (session.Session, error) {
+	conn, err := net.Dial("tcp", t.conf.TCP.TcpPort)
 	if err != nil {
 		return nil, err
 
@@ -48,9 +65,12 @@ func NewTCPClient(conf *config.Config, router *router.Router, controller ws.WsCo
 	logger.Info("The tcp client successfully established a connection between websocket gateway and tcp server")
 
 	client := &tcpClient{
-		conn:       conn,
-		router:     router,
-		controller: controller,
+		conn:         conn,
+		conf:         t.conf,
+		router:       t.router,
+		controller:   t.controller,
+		userID:       userID,
+		connectionID: connectionID,
 	}
 	go client.ReadFromServer()
 	return client, nil
@@ -65,8 +85,7 @@ func NewTCPClient(conf *config.Config, router *router.Router, controller ws.WsCo
 // Based on the opcode, the method builds the appropriate packet
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
-func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32) error {
-	t.connectionID = connectionID
+func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID string) error {
 	cp := &ClientPayload{}
 
 	// Unmarshal the incmoing byets from the gateway to the client payload struct
@@ -113,10 +132,11 @@ func (t *tcpClient) ReadFromServer() {
 		// Decode the frame.
 		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
-			t.controller.SignalToWs(t.connectionID)
+			t.controller.SignalToWs(ws.SignalToWsReq{UserID: t.userID, ConnectionID: t.connectionID})
 			logger.Error("Invalid incoming data from tcp server", "Error", err)
 			return
 		}
+		fmt.Println(frame)
 
 		// Push it to the router.
 		t.router.Route(frame)

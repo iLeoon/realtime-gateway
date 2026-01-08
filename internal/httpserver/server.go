@@ -14,6 +14,7 @@ import (
 
 func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	mux := http.NewServeMux()
+	cors := middelware.Cors(mux)
 	jwtService := jwt_.NewJWTServic(conf)
 
 	authRepo := auth.NewAuthRepository(db)
@@ -21,10 +22,10 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	mux.Handle("/auth/", routes.AuthRoute(authService, jwtService, conf))
 	mux.Handle("/users/", middelware.AuthGuard(routes.UserRoute(), jwtService))
-	// mux.Handle("/ws", middelware.AuthGuard(ws, jwtService))
-	mux.Handle("/ws", ws)
+	mux.Handle("/ws", middelware.AuthGuard(ws, jwtService))
+	// mux.Handle("/ws", ws)
 
 	logger.Info("The websocekt server is up and running..")
 	logger.Info("Listening to http requests")
-	http.ListenAndServe(conf.HttpPort, mux)
+	http.ListenAndServe(conf.HttpPort, cors)
 }

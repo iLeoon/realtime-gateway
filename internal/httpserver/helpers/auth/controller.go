@@ -104,8 +104,14 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 		return
 	}
 
-	// Set the jwt token in the header.
-	w.Header().Set("Authorization", "Bearer "+jwtToken)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    jwtToken,
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   3600,
+		SameSite: http.SameSiteStrictMode,
+	})
 	w.WriteHeader(http.StatusOK)
 
 	// For testing purposes

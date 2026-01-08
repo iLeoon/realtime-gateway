@@ -26,6 +26,7 @@ const (
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
 type Client struct {
+	userID        string
 	conn          *websocket.Conn
 	send          chan []byte
 	server        *wsServer
@@ -38,7 +39,7 @@ type Client struct {
 
 func (c *Client) readPump() {
 	defer func() {
-		c.server.unregister <- unregisterRequest{client: c, reason: "Client error"}
+		c.server.unregister <- unregisterRequest{client: c, reason: "Client side error"}
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
@@ -64,7 +65,7 @@ func (c *Client) readPump() {
 		}
 
 		// Forward the messages to ReadFromGateway with the proper data.
-		readErr := c.tcpClient.ReadFromGateway(message, c.connectionID)
+		readErr := c.tcpClient.ReadFromGateway(message, c.connectionID, c.userID)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
 			break

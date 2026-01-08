@@ -1,8 +1,10 @@
 package tcp
 
 import (
+	"fmt"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
@@ -19,13 +21,14 @@ type tcpServer struct {
 
 	// A map of connected client IDs to their active WebSocket
 	// sessions, allowing direct message delivery.
-	clients map[uint32]struct{}
+	clients map[uint32]net.Conn
+	mu      sync.Mutex
 }
 
 // Create a new instance of the TCP server.
 func newTcpServer(conn net.Conn) *tcpServer {
 	return &tcpServer{
-		clients: make(map[uint32]struct{}),
+		clients: make(map[uint32]net.Conn),
 		conn:    conn,
 	}
 }
@@ -41,6 +44,7 @@ func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
 
 	logger.Info("TCP server is up and running")
 	defer listner.Close()
+
 	close(ready)
 	// Listening to the connections
 	for {
@@ -65,11 +69,12 @@ func (t *tcpServer) handleConn() {
 		logger.Info("Tcp server connection is terminated")
 		t.conn.Close()
 	}()
+
 	for {
+
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protocol.DecodeFrame(t.conn)
-
 		if err != nil {
 			logger.Error("Invalid data from gateway", "Error", err)
 			return
@@ -113,7 +118,7 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 	}
 
 	frame := protocol.ConstructFrame(resPkt)
-	err := frame.EncodeFrame(t.conn)
+	err := frame.EncodeFrame(t.clients[recipient])
 	if err != nil {
 		return err
 	}
@@ -124,10 +129,15 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 // Uses struct{} because it costs 0 bytes in memory.
 // You can read https://dave.cheney.net/2014/03/25/the-empty-struct
 func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
-	t.clients[pkt.ConnectionID] = struct{}{}
+	t.mu.Lock()
+	t.clients[pkt.ConnectionID] = t.conn
+	t.mu.Unlock()
+	fmt.Println(t.clients)
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map
 func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket) {
+	t.mu.Lock()
 	delete(t.clients, pkt.ConnectionID)
+	t.mu.Unlock()
 }

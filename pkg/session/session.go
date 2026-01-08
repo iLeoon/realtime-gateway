@@ -23,17 +23,21 @@ type Session interface {
 	OnConnect(uint32) error
 
 	// Disconnect is called when the WebSocket closes or the server decides
-	// to terminate the session. It constructs and sends a Disconnect packet to the TCP engine.
+	// to terminate the session. It constructs and sends a Disconnect packet.
 	DisConnect(uint32) error
 
 	// ReadFromGateway processes incoming data from the WebSocket gateway.
 	// This method typically receives encoded frames or raw messages from
 	// the client, decodes them into packets, and forwards them to the TCP
 	// engine through the transporter.
-	ReadFromGateway(data []byte, connectionID uint32) error
+	ReadFromGateway(data []byte, connectionID uint32, userID string) error
 
 	// ReadFromServer handles data arriving from the TCP engine. It reads
 	// raw bytes from the transporter, decodes them into frames/packets,
 	// and pushes them back to the WebSocket client through the gateway.
 	ReadFromServer()
+}
+
+type InitiateSession interface {
+	NewTCPClient(string, uint32) (Session, error)
 }
