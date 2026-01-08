@@ -36,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Run the TCP server.
-	go tcp.InitTCPServer(conf, tcpServerReady)
+	go tcp.NewTcpServer(conf, tcpServerReady)
 
 	<-tcpServerReady
 

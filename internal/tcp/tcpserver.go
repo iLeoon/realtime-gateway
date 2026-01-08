@@ -1,7 +1,6 @@
 package tcp
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -17,26 +16,30 @@ import (
 // the gateway, applying server-side logic, and routing messages to the
 // appropriate clients.
 type tcpServer struct {
-	conn net.Conn
-
+	conf *config.Config
 	// A map of connected client IDs to their active WebSocket
 	// sessions, allowing direct message delivery.
 	clients map[uint32]net.Conn
+	ready   chan<- struct{}
 	mu      sync.Mutex
 }
 
 // Create a new instance of the TCP server.
-func newTcpServer(conn net.Conn) *tcpServer {
-	return &tcpServer{
+func NewTcpServer(conf *config.Config, ready chan<- struct{}) *tcpServer {
+	server := &tcpServer{
+		conf:    conf,
 		clients: make(map[uint32]net.Conn),
-		conn:    conn,
+		ready:   ready,
 	}
+	server.start()
+	return server
+
 }
 
 // Lanunches the server, this method must be invoked inside a separate
 // goroutine because it blocks while listening for incoming packets.
-func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
-	listner, err := net.Listen("tcp", conf.TCP.TcpPort)
+func (t *tcpServer) start() {
+	listner, err := net.Listen("tcp", t.conf.TcpPort)
 	if err != nil {
 		logger.Error("An error occured on creating tcp server", "Error", err)
 		os.Exit(1)
@@ -45,7 +48,8 @@ func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
 	logger.Info("TCP server is up and running")
 	defer listner.Close()
 
-	close(ready)
+	close(t.ready)
+
 	// Listening to the connections
 	for {
 		conn, err := listner.Accept()
@@ -53,8 +57,7 @@ func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
 			logger.Error("An error occured while trying to connect a client", "Error", err)
 			continue
 		}
-		server := newTcpServer(conn)
-		go server.handleConn()
+		go t.handleConn(conn)
 	}
 }
 
@@ -64,17 +67,17 @@ func InitTCPServer(conf *config.Config, ready chan<- struct{}) {
 //
 // It uses type assertion to convert the generic BuildPayload
 // its concrete SendMessagePacket type.
-func (t *tcpServer) handleConn() {
+func (t *tcpServer) handleConn(conn net.Conn) {
 	defer func() {
 		logger.Info("Tcp server connection is terminated")
-		t.conn.Close()
+		conn.Close()
 	}()
 
 	for {
 
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
-		frame, err := protocol.DecodeFrame(t.conn)
+		frame, err := protocol.DecodeFrame(conn)
 		if err != nil {
 			logger.Error("Invalid data from gateway", "Error", err)
 			return
@@ -85,9 +88,9 @@ func (t *tcpServer) handleConn() {
 		// its concrete *packet type
 		switch p := frame.Payload.(type) {
 		case *packets.ConnectPacket:
-			t.registerConnectionIDs(p)
+			t.registerConnectionIDs(p, conn)
 		case *packets.DisconnectPacket:
-			t.unregisterConnectionIDs(p)
+			t.unregisterConnectionIDs(p, conn)
 		case *packets.SendMessagePacket:
 			err := t.handleSendMessageReq(p)
 			if err != nil {
@@ -125,18 +128,15 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 	return nil
 }
 
-// registerConnectionIDs add a connecteionID to the map
-// Uses struct{} because it costs 0 bytes in memory.
-// You can read https://dave.cheney.net/2014/03/25/the-empty-struct
-func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket) {
+// registerConnectionIDs add a connecteionID to the map associated with it's tcp connection.
+func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket, conn net.Conn) {
 	t.mu.Lock()
-	t.clients[pkt.ConnectionID] = t.conn
+	t.clients[pkt.ConnectionID] = conn
 	t.mu.Unlock()
-	fmt.Println(t.clients)
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map
-func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket) {
+func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket, conn net.Conn) {
 	t.mu.Lock()
 	delete(t.clients, pkt.ConnectionID)
 	t.mu.Unlock()

@@ -80,6 +80,7 @@ func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, session se
 	}
 
 	tcpClient, err := session.NewTCPClient(userID, connectionID)
+	// tcpClient.OnConnect(connectionID)
 	if err != nil {
 		logger.Error("Error on initializing a new tcp client for the connection between websocket and tcp server")
 		return
@@ -180,7 +181,5 @@ func (s *wsServer) removeConnections(clients []*Client, target uint32) []*Client
 			filtered = append(filtered, c)
 		}
 	}
-
 	return filtered
-
 }
