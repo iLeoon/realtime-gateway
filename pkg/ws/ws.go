@@ -6,7 +6,7 @@ type WsClient interface {
 }
 
 type WsController interface {
-	// GetClient(string) (WsClient, bool)
+	GetClient(string, uint32) (WsClient, bool)
 	SignalToWs(SignalToWsReq)
 }
 

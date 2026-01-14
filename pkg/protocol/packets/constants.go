@@ -3,6 +3,8 @@ package packets
 const (
 	CONNECT = iota + 1
 	DISCONNECT
+	PING
+	PONG
 	SEND_MESSAGE
 	RESPONSE_MESSAGE
 )

@@ -92,7 +92,10 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 	copy(frame[6:], payloadSlice)
 
 	//Write the frame into the connection
-	w.Write(frame)
+	_, writeErr := w.Write(frame)
+	if writeErr != nil {
+		return writeErr
+	}
 	return nil
 }
 
@@ -111,6 +114,11 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Read frame header
 	n, headerErr := io.ReadFull(r, header)
+
+	// Check if the connection is dead.
+	if headerErr == io.EOF || headerErr == io.ErrUnexpectedEOF {
+		return nil, io.EOF
+	}
 
 	//Validate header size
 	if n != 6 {

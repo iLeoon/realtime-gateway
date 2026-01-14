@@ -40,7 +40,6 @@ func NewWsServer() *wsServer {
 	}
 	go s.run()
 	return s
-
 }
 
 // Upgrading the http protocol into a websocket protocol
@@ -55,7 +54,7 @@ var upgrader = websocket.Upgrader{
 // creates WebSocket clients, and registers them with the gateway.
 func (s *wsServer) Start(conf *config.Config, tcp session.InitiateSession) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.initServer(w, r, tcp)
+		s.initWsServer(w, r, tcp)
 	})
 }
 
@@ -63,7 +62,7 @@ func (s *wsServer) Start(conf *config.Config, tcp session.InitiateSession) http.
 // connection, initializes a new client session using the provided Session
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
-func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
+func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
 
 	connectionID := rand.Uint32()
 	userID, ok := ctx.GetUserIDCtx(r.Context())
@@ -80,7 +79,6 @@ func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, session se
 	}
 
 	tcpClient, err := session.NewTCPClient(userID, connectionID)
-	// tcpClient.OnConnect(connectionID)
 	if err != nil {
 		logger.Error("Error on initializing a new tcp client for the connection between websocket and tcp server")
 		return
@@ -101,7 +99,6 @@ func (s *wsServer) initServer(w http.ResponseWriter, r *http.Request, session se
 	go client.readPump()
 	go client.writePump()
 	go client.limiterFaucet()
-
 }
 
 // register/unregister a connection to the clients map
@@ -110,6 +107,7 @@ func (s *wsServer) run() {
 	for {
 		select {
 		case client := <-s.register:
+			s.mu.Lock()
 			//Add the connectionID to the websocket map
 			s.clients[client.userID] = append(s.clients[client.userID], client)
 			//Add the connectionID to the tcp server map
@@ -119,8 +117,10 @@ func (s *wsServer) run() {
 				delete(s.clients, client.userID)
 				continue
 			}
+			s.mu.Unlock()
 
 		case req := <-s.unregister:
+			s.mu.Lock()
 			if clients, ok := s.clients[req.client.userID]; ok {
 				logger.Info("Terminating the connection", "ID", req.client.connectionID, "Reason", req.reason)
 
@@ -141,6 +141,8 @@ func (s *wsServer) run() {
 				// permanently close the connection.
 				req.client.Terminate()
 			}
+			s.mu.Unlock()
+
 		case signal := <-s.signalToWs:
 			if clients, ok := s.clients[signal.UserID]; ok {
 				logger.Info("Signal received to kill connection", "ID", signal.ConnectionID, "UserID", signal.UserID)
@@ -163,12 +165,21 @@ func (s *wsServer) run() {
 	}
 }
 
-// func (s *wsServer) GetClient(userID string) (ws.WsClient, bool) {
-// 	s.mu.Lock()
-// 	defer s.mu.Unlock()
-// 	client, ok := s.clients[userID]
-// 	return client, ok
-// }
+func (s *wsServer) GetClient(userID string, connectionID uint32) (ws.WsClient, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clients, ok := s.clients[userID]
+	if !ok {
+		return nil, false
+	}
+
+	for _, client := range clients {
+		if client.connectionID == connectionID {
+			return client, true
+		}
+	}
+	return nil, false
+}
 
 func (s *wsServer) SignalToWs(req ws.SignalToWsReq) {
 	s.signalToWs <- req

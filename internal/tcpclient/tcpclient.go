@@ -3,7 +3,9 @@ package tcpclient
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/router"
@@ -12,6 +14,10 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 	"github.com/iLeoon/realtime-gateway/pkg/ws"
+)
+
+const (
+	duration = 5 * time.Second
 )
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -86,33 +92,37 @@ func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (ses
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
 func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID string) error {
+	var pkt packets.BuildPayload
 	cp := &ClientPayload{}
 
 	// Unmarshal the incmoing byets from the gateway to the client payload struct
-	json.Unmarshal(data, cp)
+	err := json.Unmarshal(data, cp)
+	if err != nil {
+		return err
+	}
 
 	// Check the message type (opcode) based on the ClientPayload.Opcode.
 	switch cp.Opcode {
 	case "send_message":
-
 		// Build the readable packet.
 		var data SendMessagePayload
-		json.Unmarshal(cp.Payload, &data)
-		pkt := &packets.SendMessagePacket{
-			ConnectionID: connectionID,
-			Content:      data.Content,
-		}
-
-		// Construct the frame, encode it, and then send it to the TCP server.
-		frame := protocol.ConstructFrame(pkt)
-		err := frame.EncodeFrame(t.conn)
+		err := json.Unmarshal(cp.Payload, &data)
 		if err != nil {
 			return err
 		}
-
+		pkt = &packets.SendMessagePacket{
+			ConnectionID: connectionID,
+			Content:      data.Content,
+		}
 	default:
 		return fmt.Errorf("Invalid packet type %s", cp.Opcode)
 	}
+
+	if err := t.connectionHygiene(pkt); err != nil {
+		t.conn.Close()
+		return err
+	}
+
 	return nil
 }
 
@@ -125,24 +135,33 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID str
 // blocking I/O while waiting for incoming data from the TCP connection.
 func (t *tcpClient) ReadFromServer() {
 	defer func() {
+		t.controller.SignalToWs(ws.SignalToWsReq{UserID: t.userID, ConnectionID: t.connectionID})
 		t.conn.Close()
 		logger.Info("Gateway closed connection to tcp server")
 	}()
+
 	for {
 		// Decode the frame.
 		frame, err := protocol.DecodeFrame(t.conn)
+		if err == io.EOF {
+			logger.Info("TCP connection is closed by peer")
+			return
+		}
+
 		if err != nil {
-			t.controller.SignalToWs(ws.SignalToWsReq{UserID: t.userID, ConnectionID: t.connectionID})
 			logger.Error("Invalid incoming data from tcp server", "Error", err)
 			return
 		}
-		fmt.Println(frame)
 
-		// Push it to the router.
-		t.router.Route(frame)
+		switch pkt := frame.Payload.(type) {
+		case *packets.PingPacket:
+			t.pongRes()
+		default:
+			// Push it to the router.
+			t.router.Route(pkt, t.userID)
+		}
 
 		logger.Debug("Decode packet", "packet", frame.Payload.String())
-
 	}
 }
 
@@ -177,4 +196,24 @@ func (t *tcpClient) DisConnect(connectionID uint32) error {
 		return err
 	}
 	return nil
+}
+
+func (t *tcpClient) connectionHygiene(pkt packets.BuildPayload) error {
+	if err := t.conn.SetWriteDeadline(time.Now().Add(duration)); err != nil {
+		return fmt.Errorf("connection is unhealty: %w", err)
+	}
+
+	// Construct the frame, encode it, and then send it to the TCP server.
+	frame := protocol.ConstructFrame(pkt)
+	err := frame.EncodeFrame(t.conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *tcpClient) pongRes() {
+	pkt := &packets.PongPacket{}
+	t.connectionHygiene(pkt)
 }

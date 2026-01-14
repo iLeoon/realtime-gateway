@@ -20,7 +20,10 @@ func ConstructPacket(op uint8) (BuildPayload, error) {
 		return &ConnectPacket{}, nil
 	case DISCONNECT:
 		return &DisconnectPacket{}, nil
-
+	case PING:
+		return &PingPacket{}, nil
+	case PONG:
+		return &PongPacket{}, nil
 	}
 
 	return nil, fmt.Errorf("%w: the value of the packet %v", errors.ErrPacketType, op)

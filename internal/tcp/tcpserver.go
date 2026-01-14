@@ -1,14 +1,23 @@
 package tcp
 
 import (
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+)
+
+const (
+	duration = 5 * time.Second
+	pingTime = 20 * time.Second
+	waitRead = 60 * time.Second
 )
 
 // TcpServer represents the central processing engine of the system. It is
@@ -58,6 +67,7 @@ func (t *tcpServer) start() {
 			continue
 		}
 		go t.handleConn(conn)
+		go t.pingReq(conn)
 	}
 }
 
@@ -69,15 +79,20 @@ func (t *tcpServer) start() {
 // its concrete SendMessagePacket type.
 func (t *tcpServer) handleConn(conn net.Conn) {
 	defer func() {
-		logger.Info("Tcp server connection is terminated")
+		logger.Info("The connection to the TCP server is terminated")
 		conn.Close()
 	}()
 
 	for {
-
+		conn.SetReadDeadline(time.Now().Add(waitRead))
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protocol.DecodeFrame(conn)
+		if err == io.EOF {
+			logger.Info("TCP connection is closed by peer")
+			return
+		}
+
 		if err != nil {
 			logger.Error("Invalid data from gateway", "Error", err)
 			return
@@ -97,6 +112,8 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 				logger.Error("Error on encoding response packet", "Error", err)
 				return
 			}
+		case *packets.PongPacket:
+			// We don't do anything we just renter the loop.
 		default:
 			logger.Error("Invalid packet type from gateway: %T", p)
 			return
@@ -104,6 +121,21 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 		logger.Debug("Decode packet", "packet", frame.Payload.String())
 	}
 
+}
+
+func (t *tcpServer) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(duration)); err != nil {
+		return fmt.Errorf("connection is unhealty: %w", err)
+	}
+
+	// Construct the frame, encode it, and then send it to the TCP server.
+	frame := protocol.ConstructFrame(pkt)
+	err := frame.EncodeFrame(conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // handleSendMessage processes an inbound SendMessage packet.
@@ -120,10 +152,29 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 		ResContent:     pkt.Content,
 	}
 
-	frame := protocol.ConstructFrame(resPkt)
-	err := frame.EncodeFrame(t.clients[recipient])
+	recipientConnection, ok := t.clients[recipient]
+	if !ok {
+		return fmt.Errorf("couldn't find the connectionID within the map")
+	}
+
+	err := t.writePacket(resPkt, recipientConnection)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (t *tcpServer) pingReq(conn net.Conn) error {
+	ticker := time.NewTicker(pingTime)
+	pkt := &packets.PingPacket{}
+	defer ticker.Stop()
+
+	for range ticker.C {
+		err := t.writePacket(pkt, conn)
+		if err != nil {
+			return err
+		}
+
 	}
 	return nil
 }

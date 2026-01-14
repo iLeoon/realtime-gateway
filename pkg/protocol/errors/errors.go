@@ -9,7 +9,7 @@ var (
 	ErrPacketType   = errors.New("Unknown packet type")
 	ErrUnknownMagic = errors.New("Unknown magic value")
 	ErrPayloadSize  = errors.New("Header len doesn't match payload len")
-	ErrHeaderSize   = errors.New("Invaliad header len")
+	ErrHeaderSize   = errors.New("Invalid header len")
 
 	ErrPktSize = errors.New("Invalid packet field size")
 )
