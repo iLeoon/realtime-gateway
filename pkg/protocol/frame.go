@@ -2,10 +2,12 @@ package protocol
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 
-	"github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
+	prtErr "github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 )
 
@@ -75,7 +77,7 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 
 	// Validate the max payload length before encoding.
 	if sizeOfPayload > int(MaxPayloadLen) {
-		return fmt.Errorf("Size of payload: %w", errors.ErrMaxPayload)
+		return fmt.Errorf("Size of payload: %w", prtErr.ErrMaxPayload)
 	}
 
 	// A slice to hold the bytes of the exact size we need.
@@ -115,34 +117,39 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	//Read frame header
 	n, headerErr := io.ReadFull(r, header)
 
-	// Check if the connection is dead.
+	// Check if the connection is dead (Remote EOF).
 	if headerErr == io.EOF || headerErr == io.ErrUnexpectedEOF {
 		return nil, io.EOF
 	}
 
+	// Check if we killed it locally (ErrClosed).
+	if errors.Is(headerErr, net.ErrClosed) {
+		return nil, net.ErrClosed
+	}
+
+	//Check for any error while reading frame header.
+	if headerErr != nil {
+		return nil, fmt.Errorf("%w:%v", prtErr.ErrReadHeader, headerErr)
+	}
+
 	//Validate header size
 	if n != 6 {
-		return nil, fmt.Errorf("Unmatch: %w", errors.ErrHeaderSize)
+		return nil, fmt.Errorf("Unmatch: %w", prtErr.ErrHeaderSize)
 	}
 
-	//Check for any error while reading frame header
-	if headerErr != nil {
-		return nil, fmt.Errorf("%w:%v", errors.ErrReadHeader, headerErr)
-	}
-
-	//Validate the magic value from the incoming packet
+	// Validate the magic value from the incoming packet.
 	if header[0] != protocolMagic {
-		return nil, fmt.Errorf("%w: magic value is %v", errors.ErrUnknownMagic, header[0])
+		return nil, fmt.Errorf("%w: magic value is %v", prtErr.ErrUnknownMagic, header[0])
 	}
 
-	// Assign the frame fields
+	// Assign the frame fields.
 	magic := header[0]
 	opcode := header[1]
 	payloadLength := binary.BigEndian.Uint32(header[2:6])
 
 	//Validate the payload length before decoding
 	if int(payloadLength) > int(MaxPayloadLen) {
-		return nil, fmt.Errorf("Payload size: %w", errors.ErrMaxPayload)
+		return nil, fmt.Errorf("Payload size: %w", prtErr.ErrMaxPayload)
 	}
 
 	// Create a slice to read into the incmoing payload bytes into.
@@ -159,13 +166,13 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Check for any error while reading frame payload
 	if payloadErr != nil {
-		return nil, fmt.Errorf("%w:%v", errors.ErrReadPayload, payloadErr)
+		return nil, fmt.Errorf("%w:%v", prtErr.ErrReadPayload, payloadErr)
 	}
 
 	//Check if the length in the frame header matches
 	//The length of the actual payload
 	if n != int(payloadLength) {
-		return nil, fmt.Errorf("Unmatch: %w", errors.ErrPayloadSize)
+		return nil, fmt.Errorf("Unmatch: %w", prtErr.ErrPayloadSize)
 	}
 
 	// Decode the packet payload

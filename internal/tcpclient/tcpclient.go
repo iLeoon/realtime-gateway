@@ -2,6 +2,7 @@ package tcpclient
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,7 +18,8 @@ import (
 )
 
 const (
-	duration = 5 * time.Second
+	writeDuration = 5 * time.Second
+	readDuration  = 60 * time.Second
 )
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -80,7 +82,6 @@ func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (ses
 	}
 	go client.ReadFromServer()
 	return client, nil
-
 }
 
 // ReadFromGateway handles incoming messages from the browser/WebSocket gateway
@@ -91,7 +92,7 @@ func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (ses
 // Based on the opcode, the method builds the appropriate packet
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
-func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID string) error {
+func (t *tcpClient) WriteToServer(data []byte) error {
 	var pkt packets.BuildPayload
 	cp := &ClientPayload{}
 
@@ -111,7 +112,7 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID str
 			return err
 		}
 		pkt = &packets.SendMessagePacket{
-			ConnectionID: connectionID,
+			ConnectionID: t.connectionID,
 			Content:      data.Content,
 		}
 	default:
@@ -122,7 +123,6 @@ func (t *tcpClient) ReadFromGateway(data []byte, connectionID uint32, userID str
 		t.conn.Close()
 		return err
 	}
-
 	return nil
 }
 
@@ -142,14 +142,18 @@ func (t *tcpClient) ReadFromServer() {
 
 	for {
 		// Decode the frame.
+		t.conn.SetReadDeadline(time.Now().Add(readDuration))
 		frame, err := protocol.DecodeFrame(t.conn)
-		if err == io.EOF {
-			logger.Info("TCP connection is closed by peer")
-			return
-		}
-
 		if err != nil {
-			logger.Error("Invalid incoming data from tcp server", "Error", err)
+			if errors.Is(err, io.EOF) {
+				logger.Info("TCP connection is closed by peer(server)")
+				return
+			}
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
+			logger.Error("Unexpected tcp read error", "error", err)
 			return
 		}
 
@@ -171,35 +175,30 @@ func (t *tcpClient) ReadFromServer() {
 // It constructs the connectp packet encodes it into a frame, and forwards it
 // to the TCP server so the engine can register and track the new
 // client session.
-func (t *tcpClient) OnConnect(connectionID uint32) error {
+func (t *tcpClient) OnConnect() error {
 	pkt := &packets.ConnectPacket{
-		ConnectionID: connectionID,
+		ConnectionID: t.connectionID,
 	}
-
-	frame := protocol.ConstructFrame(pkt)
-	err := frame.EncodeFrame(t.conn)
-	if err != nil {
+	if err := t.connectionHygiene(pkt); err != nil {
 		return err
 	}
 	return nil
 }
 
 // DisConnect is basically the inverse of OnConnect.
-func (t *tcpClient) DisConnect(connectionID uint32) error {
+func (t *tcpClient) OnDisConnect() error {
 	pkt := &packets.DisconnectPacket{
-		ConnectionID: connectionID,
+		ConnectionID: t.connectionID,
 	}
-
-	frame := protocol.ConstructFrame(pkt)
-	err := frame.EncodeFrame(t.conn)
-	if err != nil {
+	if err := t.connectionHygiene(pkt); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (t *tcpClient) connectionHygiene(pkt packets.BuildPayload) error {
-	if err := t.conn.SetWriteDeadline(time.Now().Add(duration)); err != nil {
+	if err := t.conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
 		return fmt.Errorf("connection is unhealty: %w", err)
 	}
 
@@ -209,7 +208,6 @@ func (t *tcpClient) connectionHygiene(pkt packets.BuildPayload) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

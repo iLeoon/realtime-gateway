@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,9 +16,9 @@ import (
 )
 
 const (
-	duration = 5 * time.Second
-	pingTime = 20 * time.Second
-	waitRead = 60 * time.Second
+	writeDuration = 5 * time.Second
+	pingTime      = 20 * time.Second
+	pongWait      = 60 * time.Second
 )
 
 // TcpServer represents the central processing engine of the system. It is
@@ -84,17 +85,21 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 	}()
 
 	for {
-		conn.SetReadDeadline(time.Now().Add(waitRead))
+		conn.SetReadDeadline(time.Now().Add(pongWait))
 		// Call the decoder function on the connection to read
 		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protocol.DecodeFrame(conn)
-		if err == io.EOF {
-			logger.Info("TCP connection is closed by peer")
-			return
-		}
-
 		if err != nil {
-			logger.Error("Invalid data from gateway", "Error", err)
+			if errors.Is(err, io.EOF) {
+				logger.Info("TCP connection is closed by peer(gateway)")
+				return
+
+			}
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
+			logger.Error("Unexpected tcp read error", "error", err)
 			return
 		}
 
@@ -124,7 +129,7 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 }
 
 func (t *tcpServer) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
-	if err := conn.SetWriteDeadline(time.Now().Add(duration)); err != nil {
+	if err := conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
 		return fmt.Errorf("connection is unhealty: %w", err)
 	}
 
@@ -189,6 +194,7 @@ func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket, conn net.C
 // unRegisterConnectionIDs removes the connectionID from the map
 func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket, conn net.Conn) {
 	t.mu.Lock()
+	conn.Close()
 	delete(t.clients, pkt.ConnectionID)
 	t.mu.Unlock()
 }

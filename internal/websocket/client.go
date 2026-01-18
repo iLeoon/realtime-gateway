@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -64,8 +63,8 @@ func (c *Client) readPump() {
 			return
 		}
 
-		// Forward the messages to ReadFromGateway with the proper data.
-		readErr := c.tcpClient.ReadFromGateway(message, c.connectionID, c.userID)
+		// Forward the messages to WriteToServer with the proper data.
+		readErr := c.tcpClient.WriteToServer(message)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
 			break
@@ -132,7 +131,6 @@ func (c *Client) limiterFaucet() {
 }
 
 func (c *Client) SendMessage(message []byte) {
-	fmt.Println(len(c.send))
 	select {
 	case c.send <- message:
 		return

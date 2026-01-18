@@ -63,7 +63,6 @@ func (s *wsServer) Start(conf *config.Config, tcp session.InitiateSession) http.
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
 func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
-
 	connectionID := rand.Uint32()
 	userID, ok := ctx.GetUserIDCtx(r.Context())
 	if !ok {
@@ -110,8 +109,9 @@ func (s *wsServer) run() {
 			s.mu.Lock()
 			//Add the connectionID to the websocket map
 			s.clients[client.userID] = append(s.clients[client.userID], client)
+
 			//Add the connectionID to the tcp server map
-			err := client.tcpClient.OnConnect(client.connectionID)
+			err := client.tcpClient.OnConnect()
 			if err != nil {
 				logger.Error("Couldn't register this client", "ClientID", "Error", client.connectionID, err)
 				delete(s.clients, client.userID)
@@ -133,9 +133,9 @@ func (s *wsServer) run() {
 				}
 
 				//Remove the connectionID from the tcp server map
-				err := req.client.tcpClient.DisConnect(req.client.connectionID)
+				err := req.client.tcpClient.OnDisConnect()
 				if err != nil {
-					logger.Error("Couldn't unregister this client", "ClientID", "Error", req.client.connectionID, err)
+					logger.Error("Couldn't unregister this client", "ClientID", req.client.connectionID, "Error", err)
 				}
 
 				// permanently close the connection.

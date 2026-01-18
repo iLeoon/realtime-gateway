@@ -20,17 +20,17 @@ package session
 type Session interface {
 	// OnConnect is invoked when the WebSocket session is established.
 	// Its primary responsibility is to create and send a Connect packet to the TCP engine.
-	OnConnect(uint32) error
+	OnConnect() error
 
 	// Disconnect is called when the WebSocket closes or the server decides
 	// to terminate the session. It constructs and sends a Disconnect packet.
-	DisConnect(uint32) error
+	OnDisConnect() error
 
-	// ReadFromGateway processes incoming data from the WebSocket gateway.
+	// WriteToServer processes incoming data from the WebSocket gateway.
 	// This method typically receives encoded frames or raw messages from
 	// the client, decodes them into packets, and forwards them to the TCP
 	// engine through the transporter.
-	ReadFromGateway(data []byte, connectionID uint32, userID string) error
+	WriteToServer(data []byte) error
 
 	// ReadFromServer handles data arriving from the TCP engine. It reads
 	// raw bytes from the transporter, decodes them into frames/packets,
