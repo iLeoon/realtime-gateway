@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"container/list"
 	"sync"
 	"time"
 
@@ -34,16 +35,23 @@ type Client struct {
 	burstyLimiter chan time.Time
 	done          chan struct{}
 	once          sync.Once
+	idleElement   *list.Element
+	lastActiveAt  time.Time
+	isActive      bool
 }
 
 func (c *Client) readPump() {
 	defer func() {
 		c.server.unregister <- unregisterRequest{client: c, reason: "Client side error"}
+		c.server.reclaimConnLocked(c)
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(appData string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(appData string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -54,7 +62,7 @@ func (c *Client) readPump() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				logger.Error("Unexpected error shutting down websocket server", "Error", err)
 			}
-			break
+			return
 		}
 
 		// Add a throttle for reading messages.
@@ -63,12 +71,16 @@ func (c *Client) readPump() {
 			return
 		}
 
+		c.server.reclaimConnLocked(c)
+
 		// Forward the messages to WriteToServer with the proper data.
 		readErr := c.tcpClient.WriteToServer(message)
 		if readErr != nil {
 			logger.Error("Error on trying to read message from browser", "Error", readErr)
-			break
+			return
 		}
+		// Mark the connection inactive after reading.
+		c.server.putConn(c)
 	}
 
 }
@@ -98,6 +110,9 @@ func (c *Client) writePump() {
 				logger.Error("Failed to close writer", "Error", err)
 				return
 			}
+
+			// Mark the connection as inactive after writing.
+			c.server.putConn(c)
 
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
@@ -136,7 +151,6 @@ func (c *Client) SendMessage(message []byte) {
 		return
 
 	default:
-		logger.Error("backpressure violation")
 		c.server.unregister <- unregisterRequest{client: c, reason: "Buffer full(Backpressure)"}
 		return
 
