@@ -20,6 +20,7 @@ import (
 // client lifecycle events
 type wsServer struct {
 	clients     map[string][]*Client
+	config      *config.Config
 	unregister  chan unregisterRequest
 	signalToWs  chan ws.SignalToWsReq
 	mu          sync.Mutex
@@ -35,29 +36,23 @@ type unregisterRequest struct {
 }
 
 // Create new websocket server
-func NewWsServer() *wsServer {
+func NewWsServer(config *config.Config) *wsServer {
 	s := &wsServer{
 		clients:    make(map[string][]*Client),
 		unregister: make(chan unregisterRequest),
 		signalToWs: make(chan ws.SignalToWsReq),
 		idleList:   list.New(),
+		config:     config,
 	}
 	s.setMaxIdleTime(30 * time.Second)
 	go s.run()
 	return s
 }
 
-// Upgrading the http protocol into a websocket protocol
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
-}
-
 // Start constructs and returns an http.Handler responsible for handling
 // WebSocket upgrade requests. It upgrades incoming HTTP requests,
 // creates WebSocket clients, and registers them with the gateway.
-func (s *wsServer) Start(conf *config.Config, tcp session.InitiateSession) http.Handler {
+func (s *wsServer) Start(tcp session.InitiateSession) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.initWsServer(w, r, tcp)
 	})
@@ -68,14 +63,23 @@ func (s *wsServer) Start(conf *config.Config, tcp session.InitiateSession) http.
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
 func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
+	// the upgrader configuration
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return s.config.FrontEndOrigin == r.Header.Get("Origin")
+		},
+	}
 	connectionID := rand.Uint32()
 	userID, ok := ctx.GetUserIDCtx(r.Context())
+
 	if !ok {
 		logger.Error("Couldn't extract the ID from the request")
 		return
 	}
 
-	//the actual websocket connection
+	// upgrade the websocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("Error on upgrading raw tcp connection into websocekt", "Error", err)
@@ -120,7 +124,7 @@ func (s *wsServer) registerClient(client *Client) {
 	}
 }
 
-// register/unregister a connection to the clients map
+// Unregister unregisters a connection to the clients map
 // and signal to the ws when an error occures to disconnect the user.
 func (s *wsServer) run() {
 	for {

@@ -1,6 +1,6 @@
-package models
+package auth
 
-type ProviderUser struct {
+type ProviderIdentity struct {
 	ProviderID string
 	Email      string
 	Name       string

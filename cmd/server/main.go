@@ -41,7 +41,7 @@ func main() {
 	<-tcpServerReady
 
 	//Start new WebSocket server instance.
-	wsServer := websocket.NewWsServer()
+	wsServer := websocket.NewWsServer(conf)
 
 	// Start new router instance and pass the WebSocket server connections map.
 	router := router.NewRouter(wsServer)
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// Retrive the ws handler and pass it to the http server.
-	wsHandler := wsServer.Start(conf, tcpFactory)
+	wsHandler := wsServer.Start(tcpFactory)
 
 	httpserver.Start(conf, db, wsHandler)
 

@@ -1,1 +1,27 @@
+# configurations the server needs to run.
+server:
+  tcp_port: 8080
+  host: localhost
 
+http_server:
+  http_port: 7000
+  host: localhost
+
+database:
+  user: postgres
+  password: admin
+  name: chatserver
+  host: localhost
+  port: 5432
+
+jwt:
+  secret: your-secret
+  issuer: my-issuer
+
+oauth:
+  google_client_id: your-google-client-id
+  google_secret: your-google-secret
+  redirect_url: your-google-redirect-url
+
+origins:
+  frontend_origin: your-frontend

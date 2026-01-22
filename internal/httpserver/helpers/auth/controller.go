@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
+	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/token"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )
 
-func LoginHandler(w http.ResponseWriter, r *http.Request, authService AuthServiceInterface) {
+func LoginHandler(w http.ResponseWriter, r *http.Request, s Service) {
 	verifier := oauth2.GenerateVerifier()
 	stateString := rand.Text()
 
-	url := authService.LoginUser(verifier, stateString)
+	url := s.GenerateOAuthUrl(verifier, stateString)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pkce_verifier",
@@ -39,7 +39,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request, authService AuthServic
 
 }
 
-func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService AuthServiceInterface, jwt jwt_.JwtInterface) {
+func RedirectURLHandler(w http.ResponseWriter, r *http.Request, s Service, t token.Service) {
 
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
@@ -69,7 +69,7 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 		return
 	}
 
-	token, err := authService.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
+	token, err := s.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
 		logger.Error("error on exchanging the token", "Error", err)
 		http.Error(w, "Exchange the tokens has failed", http.StatusInternalServerError)
@@ -84,20 +84,20 @@ func RedirectURLHandler(w http.ResponseWriter, r *http.Request, authService Auth
 		return
 	}
 
-	payload, err := idtoken.Validate(r.Context(), rawIDToken, authService.GoogleClient().ClientID)
+	payload, err := idtoken.Validate(r.Context(), rawIDToken, s.GoogleClient().ClientID)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusInternalServerError)
 		logger.Error("Error", err)
 		return
 	}
 
-	userID, err := authService.HandleToken(payload, r.Context())
+	userID, err := s.HandleToken(payload, r.Context())
 	if err != nil {
 		logger.Error("couldn't create or retrive the user", "error", err)
 		return
 	}
 
-	jwtToken, err := jwt.GenerateJWT(userID)
+	jwtToken, err := t.EncodeJwt(userID)
 	if err != nil {
 		logger.Error("can't generate jwt token", "Error", err)
 		http.Error(w, "error on authorization flow", http.StatusBadRequest)

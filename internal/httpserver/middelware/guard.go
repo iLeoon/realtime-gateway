@@ -3,12 +3,12 @@ package middelware
 import (
 	"net/http"
 
-	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/jwt_"
+	"github.com/iLeoon/realtime-gateway/internal/httpserver/helpers/token"
 	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 )
 
-func AuthGuard(next http.Handler, jwt jwt_.JwtInterface) http.Handler {
+func AuthGuard(next http.Handler, jwt token.Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authCookie, err := r.Cookie("auth_token")
 		if err != nil {
@@ -18,7 +18,7 @@ func AuthGuard(next http.Handler, jwt jwt_.JwtInterface) http.Handler {
 
 		}
 
-		userID, err := jwt.DecodeJWT(authCookie.Value)
+		userID, err := jwt.DecodeJwt(authCookie.Value)
 		if err != nil {
 			logger.Error("error on decoding jwt", "Error", err)
 			http.Error(w, "Invalid subject", http.StatusBadRequest)

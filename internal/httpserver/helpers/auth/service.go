@@ -4,61 +4,59 @@ import (
 	"context"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/pkg/models"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/idtoken"
 )
 
-type AuthServiceInterface interface {
-	LoginUser(string, string) string
-	GoogleClient() *oauth2.Config
-	HandleToken(*idtoken.Payload, context.Context) (int, error)
+type Service interface {
+	GenerateOAuthUrl(verifier string, state string) (url string)
+	GoogleClient() (config *oauth2.Config)
+	HandleToken(*idtoken.Payload, context.Context) (userId int, err error)
 }
 
-type AuthService struct {
+type service struct {
 	config *config.Config
-	repo   AuthRepositpryInterface
+	repo   Repository
 }
 
-func NewAuthService(config *config.Config, repo AuthRepositpryInterface) *AuthService {
-	return &AuthService{
-		config: config,
-		repo:   repo,
+func NewService(c *config.Config, r Repository) Service {
+	return &service{
+		config: c,
+		repo:   r,
 	}
 }
 
-func (as *AuthService) LoginUser(verifier string, state string) string {
-	url := as.GoogleClient().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
+func (s *service) GenerateOAuthUrl(verifier string, state string) string {
+	url := s.GoogleClient().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	return url
 
 }
 
-func (as *AuthService) HandleToken(payload *idtoken.Payload, ctx context.Context) (int, error) {
-
-	User := models.ProviderUser{
-		ProviderID: payload.Subject,
-		Email:      payload.Claims["email"].(string),
-		Name:       payload.Claims["name"].(string),
+func (s *service) HandleToken(p *idtoken.Payload, ctx context.Context) (int, error) {
+	User := ProviderIdentity{
+		ProviderID: p.Subject,
+		Email:      p.Claims["email"].(string),
+		Name:       p.Claims["name"].(string),
 		Provider:   "google",
 	}
-	userID, err := as.repo.HandleLogins(ctx, User)
+	userId, err := s.repo.CreateOrUpdateUser(ctx, User)
 
 	if err != nil {
 		return 0, err
 	}
-	return userID, nil
+	return userId, err
 }
 
-func (as *AuthService) GoogleClient() *oauth2.Config {
-	GoogleClient := &oauth2.Config{
-		ClientID:     as.config.GoogleClientID,
-		ClientSecret: as.config.GoogleClientSecret,
-		RedirectURL:  as.config.RedirectURL,
+func (s *service) GoogleClient() *oauth2.Config {
+	GoogleConfig := &oauth2.Config{
+		ClientID:     s.config.GoogleClientID,
+		ClientSecret: s.config.GoogleClientSecret,
+		RedirectURL:  s.config.RedirectURL,
 		Scopes:       []string{"openid", "email", "profile"},
 		Endpoint:     google.Endpoint,
 	}
 
-	return GoogleClient
+	return GoogleConfig
 
 }

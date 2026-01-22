@@ -5,80 +5,91 @@ import (
 	"errors"
 
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/iLeoon/realtime-gateway/pkg/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type AuthRepositpryInterface interface {
-	HandleLogins(context.Context, models.ProviderUser) (int, error)
+type Repository interface {
+	CreateOrUpdateUser(ctx context.Context, user ProviderIdentity) (userId int, err error)
 }
 
-type AuthRepository struct {
+type repository struct {
 	db *pgxpool.Pool
 }
 
-func NewAuthRepository(db *pgxpool.Pool) *AuthRepository {
-	return &AuthRepository{
+func NewRepo(db *pgxpool.Pool) Repository {
+	return &repository{
 		db: db,
 	}
 }
 
-func (ar *AuthRepository) HandleLogins(ctx context.Context, User models.ProviderUser) (int, error) {
-	tx, beginErr := ar.db.Begin(ctx)
-	if beginErr != nil {
-		return 0, beginErr
+// CreateOrUpdateUser checks if the user already exists in the db, if the user exists update the information as needed.
+// If not create a new record for the user, and return userId.
+func (r *repository) CreateOrUpdateUser(ctx context.Context, user ProviderIdentity) (userId int, err error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, err
 	}
 
-	var userID int
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
 
-	// Retrive the user from database
-	// who is trying to login.
-	execErr := tx.QueryRow(ctx, `select user_id
+	// Retrive the user from database who is trying to login.
+	err = tx.QueryRow(ctx, `select user_id
 	from providers 
-	where provider_user_id =$1 and provider =$2`, User.ProviderID, User.Provider).Scan(&userID)
+	where provider_user_id =$1 and provider =$2`, user.ProviderID, user.Provider).Scan(&userId)
 
-	// If there is no user in the database
-	// no row is retrived, then create the user.
-	if errors.Is(execErr, pgx.ErrNoRows) {
-		createUserErr := tx.QueryRow(ctx, `INSERT INTO users (username, email)
+	if err != nil {
+		// If there is no rows retrieve from the database,
+		// Create records in the users, and providers tables.
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = tx.QueryRow(ctx, `INSERT INTO users (username, email)
 		VALUES ($1, $2) RETURNING user_id`,
-			User.Name,
-			User.Email).Scan(&userID)
+				user.Name,
+				user.Email).Scan(&userId)
 
-		if createUserErr != nil {
-			return 0, createUserErr
-		}
+			if err != nil {
+				return 0, err
+			}
 
-		_, createProviderErr := tx.Exec(ctx, `INSERT INTO providers (provider, provider_user_id, user_id)
+			_, err = tx.Exec(ctx, `INSERT INTO providers (provider, provider_user_id, user_id)
 		VALUES ($1, $2, $3)`,
-			User.Provider,
-			User.ProviderID,
-			userID,
-		)
-		if createProviderErr != nil {
-			return 0, createProviderErr
+				user.Provider,
+				user.ProviderID,
+				userId,
+			)
+			if err != nil {
+				return 0, err
+			}
+
+			logger.Info(`Created a new user with their corresponding provider into the database`)
+		} else {
+			return 0, err
 		}
 
-		logger.Info(`Created a new user with their corresponding provider into the database`)
+	} else {
+		// If the user who is attempting to login already exists
+		// Update their data only if the username updated otherwise skip.
+		var tag pgconn.CommandTag
+		tag, err = tx.Exec(ctx, `UPDATE users SET username=$1
+	         WHERE user_id=$2 AND (username <> $1)`,
+			user.Name,
+			userId,
+		)
+
+		if err != nil {
+			return 0, err
+		}
+
+		if tag.RowsAffected() != 0 {
+			logger.Info("A user has updated their data")
+		}
+
 	}
-
-	// Update the user data only if the username or email updated otherwise skip.
-	row, updateUserErr := tx.Exec(ctx, `UPDATE users SET email=$1, username=$2 
-	WHERE user_id=$3 AND (email <> $1 OR username <> $2)`,
-		User.Email,
-		User.Name,
-		userID,
-	)
-
-	if updateUserErr != nil {
-		return 0, updateUserErr
-	}
-
-	if row.RowsAffected() != 0 {
-		logger.Info("A user has updated their data")
-	}
-
-	return userID, tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	return userId, err
 }
