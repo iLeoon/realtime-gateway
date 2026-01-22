@@ -1,0 +1,22 @@
+post:
+  summary: Authenticate User
+  description: >
+    This operation authenticates the user using an external identity provider.
+    The identity is verified and mapped to an internal user.
+    If the user does not exist, a new user is created. If the user already exists, their record is updated as needed.
+    Returns the internal user identifier.
+  operationId: authenticateUser
+  security: []
+  responses:
+    "303":
+      description: Redirect to external identity provider
+      headers:
+        Location:
+          description: Redirect target URL
+          schema:
+            type: string
+        Set-Cookie:
+          description: >
+            Two cookies are set by the server (pkce-verifier and state) to protect the authentication flow.
+          schema:
+            type: string

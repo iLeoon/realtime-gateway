@@ -1,0 +1,38 @@
+openapi: 3.2.0
+info:
+  title: realtime-gateway API
+  description: A high-performance real-time messaging gateway built with WebSockets and a custom TCP engine. Features a binary framing protocol
+  version: 1.0.0
+servers:
+  - url: http://{host}:{port}/api/v1.0
+    description: The developement API server
+    name: dev
+    variables:
+      host:
+        default: localhost
+      port:
+        default: "7000"
+
+paths:
+  /auth/login:
+    $ref: ./paths/auth.yml
+    description: The resource authenticates users
+
+components:
+  securitySchemes:
+    GoogleOAuth:
+      description: google's provider
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+          tokenUrl: https://oauth2.googleapis.com/token
+          scopes:
+            openid: OpenID Connect
+            email: User Email
+            profile: User Profile
+    JWTAuth:
+      description: authenticate users with jwt
+      type: http
+      scheme: bearer
+      bearerFormat: jwt
