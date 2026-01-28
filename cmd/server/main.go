@@ -5,11 +5,10 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/db"
-	"github.com/iLeoon/realtime-gateway/internal/httpserver"
 	"github.com/iLeoon/realtime-gateway/internal/router"
-	"github.com/iLeoon/realtime-gateway/internal/tcp"
-	"github.com/iLeoon/realtime-gateway/internal/tcpclient"
-	"github.com/iLeoon/realtime-gateway/internal/websocket"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http"
+	"github.com/iLeoon/realtime-gateway/internal/transport/tcp"
+	"github.com/iLeoon/realtime-gateway/internal/transport/websocket"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 )
 
@@ -48,7 +47,7 @@ func main() {
 
 	// Start a new TCP Factory to manage connections between TCP server
 	// and WebSocket gateway.
-	tcpFactory := tcpclient.NewFactory(conf, router, wsServer)
+	tcpFactory := tcp.NewFactory(conf, router, wsServer)
 
 	if err != nil {
 		logger.Error("Can't connect to the tcp server", "Error", err)
@@ -58,6 +57,6 @@ func main() {
 	// Retrive the ws handler and pass it to the http server.
 	wsHandler := wsServer.Start(tcpFactory)
 
-	httpserver.Start(conf, db, wsHandler)
+	http.Start(conf, db, wsHandler)
 
 }
