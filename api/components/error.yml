@@ -1,0 +1,48 @@
+Error:
+  type: object
+  required: [error]
+  properties:
+    error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable, service-defined error code
+          example: Unauthorized
+
+        message:
+          type: string
+          description: Human-readable developer message
+          example: Authentication is required
+
+        target:
+          type: string
+          description: The request element that caused the error
+          example: authorization
+
+        innererror:
+          $ref: "#/InnerError"
+
+InnerError:
+  type: object
+  required: [code]
+  properties:
+    code:
+      type: string
+      description: More specific error code
+      example: MissingUserIdContext
+
+    innererror:
+      $ref: "#/InnerErrorDetails"
+
+InnerErrorDetails:
+  type: object
+  properties:
+    code:
+      type: string
+      example: UserIdMissing
+    minLength:
+      type: string
+    maxLength:
+      type: string

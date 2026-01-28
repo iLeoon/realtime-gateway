@@ -1,0 +1,33 @@
+get:
+  summary: Get WebSocket access token
+  description: >
+    This operation issues a short-lived WebSocket access token (ticket)
+    for the authenticated user.
+    The caller must be authenticated.
+    The returned token is intended to be used once during the WebSocket
+    connection handshake and is scoped to real-time communication only.
+  operationId: getWebSocketToken
+  security:
+    - JWTAuth: []
+  responses:
+    "200":
+      description: WebSocket token issued successfully
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ticket
+            properties:
+              ticket:
+                type: string
+                description: >
+                  A short-lived JWT used to authenticate the WebSocket
+                  connection.
+                example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
+    "500":
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error

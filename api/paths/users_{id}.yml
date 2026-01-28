@@ -1,0 +1,51 @@
+get:
+  summary: Get User
+  description: >
+    This operation fetches the user by their id.
+    It validates the parameter and the caller must be authenticated and is only allowed to access their own user resource.
+  operationId: getUserById
+  parameters:
+    - name: id
+      in: path
+      description: The user id used to fetch the specified user
+      required: true
+      example: 22
+      schema:
+        type: integer
+  security:
+    - JWTAuth: []
+  responses:
+    "200":
+      description: User retrieved successfully
+      content:
+        application/json:
+          schema:
+            $ref: ../components/user.yml#/User
+
+    "400":
+      description: BadRequest - invalid Id
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+
+    "403":
+      description: Forbidden - user is not allowed to access this resource
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+
+    "404":
+      description: User not found
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+
+    "500":
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error

@@ -1,0 +1,23 @@
+User:
+  type: object
+  description: Represents a user in the database
+  required:
+    - userId
+    - userName
+    - email
+  properties:
+    userId:
+      type: integer
+      description: User's unique identifier
+      example: 22
+
+    userName:
+      type: string
+      description: User's username from the external identity provider
+      example: ahmed.eihab
+
+    email:
+      type: string
+      description: User's email from the external identity provider
+      format: email
+      example: ahmed@gmail.com
