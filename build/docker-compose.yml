@@ -13,5 +13,14 @@ services:
       - "5432:5432"
     restart: unless-stopped
 
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "8082:8080"
+    volumes:
+      - ../api:/usr/share/nginx/html/api
+    environment:
+      - URL=api/openapi.yml
+
 volumes:
   pgdata:
