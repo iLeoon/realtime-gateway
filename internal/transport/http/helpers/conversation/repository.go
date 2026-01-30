@@ -6,15 +6,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Repository interface {
-	CreateOrFindConversation(ctx context.Context, creatorId int) (err error)
-}
-
 type repository struct {
 	db *pgxpool.Pool
 }
 
-func NewRepo(db *pgxpool.Pool) Repository {
+func NewRepo(db *pgxpool.Pool) *repository {
 	return &repository{
 		db: db,
 	}

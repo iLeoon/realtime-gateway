@@ -4,21 +4,21 @@ import (
 	"context"
 )
 
-type Service interface {
-	GetUser(userId int, ctxc context.Context) (user *User, err error)
+type Repository interface {
+	GetUserById(userId string, ctx context.Context) (user *User, err error)
 }
 
 type service struct {
 	repo Repository
 }
 
-func NewService(userRepo Repository) Service {
+func NewService(userRepo Repository) *service {
 	return &service{
 		repo: userRepo,
 	}
 }
 
-func (s *service) GetUser(userId int, ctx context.Context) (*User, error) {
+func (s *service) GetUser(userId string, ctx context.Context) (*User, error) {
 	user, err := s.repo.GetUserById(userId, ctx)
 	if err != nil {
 		return nil, err

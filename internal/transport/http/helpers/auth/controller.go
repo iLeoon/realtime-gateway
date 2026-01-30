@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"net/http"
@@ -10,6 +11,12 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )
+
+type Service interface {
+	GenerateOAuthUrl(verifier string, state string) (url string)
+	GoogleClient() (config *oauth2.Config)
+	HandleToken(p *idtoken.Payload, ctx context.Context) (userId int, err error)
+}
 
 func LoginHandler(w http.ResponseWriter, r *http.Request, authService Service) {
 	verifier := oauth2.GenerateVerifier()

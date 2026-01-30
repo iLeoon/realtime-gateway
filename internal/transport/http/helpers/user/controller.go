@@ -1,14 +1,20 @@
 package user
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"strconv"
+
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"net/http"
-	"strconv"
 )
+
+type Service interface {
+	GetUser(userId string, ctx context.Context) (user *User, err error)
+}
 
 func GetUserProfile(w http.ResponseWriter, r *http.Request, userService Service) {
 	//Get the user id from the context
@@ -27,13 +33,13 @@ func GetUserProfile(w http.ResponseWriter, r *http.Request, userService Service)
 	// Get the user id from the path url
 	targetId := r.PathValue("id")
 
-	// Convert and validate the incoming id in the path url.
-	id, err := strconv.Atoi(targetId)
+	// Validate the incoming id in the path url.
+	_, err := strconv.Atoi(targetId)
 	if err != nil {
 		apiErr := apierror.Build(apierror.BadRequest, "Invalid id type",
 			apierror.WithTarget("userId"),
 			apierror.WithInnerError(apierror.InnerError{
-				Code: "InvalidIdUsedInThePath",
+				Code: "InvalidIdFormatUsedInThePath",
 			}),
 		)
 		apierror.Send(w, http.StatusBadRequest, apiErr)
@@ -51,7 +57,7 @@ func GetUserProfile(w http.ResponseWriter, r *http.Request, userService Service)
 		return
 	}
 
-	user, err := userService.GetUser(id, r.Context())
+	user, err := userService.GetUser(targetId, r.Context())
 	if err != nil {
 		if errors.Is(err, UserNotFoundErr) {
 			logger.Info("Id was not found in the database", "Error", err.Error())

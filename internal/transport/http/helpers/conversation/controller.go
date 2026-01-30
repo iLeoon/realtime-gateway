@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -8,6 +9,10 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 )
+
+type Service interface {
+	CreateConversation(ctx context.Context, creatorId string)
+}
 
 func Create(w http.ResponseWriter, r *http.Request, convService Service) {
 	var reqBody CreateConversationReq

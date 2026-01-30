@@ -9,10 +9,8 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-type Service interface {
-	GenerateOAuthUrl(verifier string, state string) (url string)
-	GoogleClient() (config *oauth2.Config)
-	HandleToken(p *idtoken.Payload, ctx context.Context) (userId int, err error)
+type Repository interface {
+	CreateOrUpdateUser(ctx context.Context, user ProviderIdentity) (userId int, err error)
 }
 
 type service struct {
@@ -20,7 +18,7 @@ type service struct {
 	repo   Repository
 }
 
-func NewService(c *config.Config, authRepo Repository) Service {
+func NewService(c *config.Config, authRepo Repository) *service {
 	return &service{
 		config: c,
 		repo:   authRepo,

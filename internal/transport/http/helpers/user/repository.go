@@ -14,21 +14,17 @@ var (
 	UnexpectedErr   = errors.New("An unexpected error occured while processing the request.")
 )
 
-type Repository interface {
-	GetUserById(userId int, ctx context.Context) (user *User, err error)
-}
-
 type repository struct {
 	db *pgxpool.Pool
 }
 
-func NewRepo(db *pgxpool.Pool) Repository {
+func NewRepo(db *pgxpool.Pool) *repository {
 	return &repository{
 		db: db,
 	}
 }
 
-func (r *repository) GetUserById(userId int, ctx context.Context) (*User, error) {
+func (r *repository) GetUserById(userId string, ctx context.Context) (*User, error) {
 	var user User
 	err := r.db.QueryRow(ctx, `SELECT user_id, username, email FROM users WHERE user_id =$1`, userId).Scan(&user.UserId, &user.UserName, &user.Email)
 	if err != nil {
