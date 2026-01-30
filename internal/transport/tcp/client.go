@@ -9,13 +9,19 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/internal/router"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol"
 	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
-	"github.com/iLeoon/realtime-gateway/pkg/ws"
 )
+
+type Router interface {
+	Route(p packets.BuildPayload, userId string)
+}
+
+type Signaler interface {
+	Signal(userId string, connectionId uint32)
+}
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
 // TCP engine. It implements the Session interface.
@@ -33,24 +39,24 @@ import (
 //	TCP Engine  → DecodeFrame → Route Packet → Handle Response → WebSocket Client
 type tcpClient struct {
 	conn         net.Conn
-	conf         *config.Config
-	router       *router.Router
+	config       *config.Config
+	router       Router
 	connectionID uint32 // the requester connection ID
 	userID       string // the requester user ID
-	controller   ws.WsController
+	signal       Signaler
 }
 
 type tcpClientFactory struct {
-	conf       *config.Config
-	router     *router.Router // Router routes the data coming from Tcp server to websocket gateway.
-	controller ws.WsController
+	config *config.Config
+	router Router // Router routes the data coming from Tcp server to websocket gateway.
+	signal Signaler
 }
 
-func NewFactory(config *config.Config, router *router.Router, controller ws.WsController) *tcpClientFactory {
+func NewFactory(c *config.Config, r Router, s Signaler) *tcpClientFactory {
 	return &tcpClientFactory{
-		conf:       config,
-		router:     router,
-		controller: controller,
+		config: c,
+		router: r,
+		signal: s,
 	}
 }
 
@@ -58,8 +64,8 @@ func NewFactory(config *config.Config, router *router.Router, controller ws.WsCo
 // gateway and the TCP engine. This function create the bridge
 // between the websocket gateway and tcp server
 // to send/receive messages.
-func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (session.Session, error) {
-	conn, err := net.Dial("tcp", t.conf.TCP.TcpPort)
+func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (session.Session, error) {
+	conn, err := net.Dial("tcp", t.config.TCP.TcpPort)
 	if err != nil {
 		return nil, err
 
@@ -69,9 +75,9 @@ func (t *tcpClientFactory) NewTCPClient(userID string, connectionID uint32) (ses
 
 	client := &tcpClient{
 		conn:         conn,
-		conf:         t.conf,
+		config:       t.config,
 		router:       t.router,
-		controller:   t.controller,
+		signal:       t.signal,
 		userID:       userID,
 		connectionID: connectionID,
 	}
@@ -130,7 +136,7 @@ func (t *tcpClient) WriteToServer(data []byte) error {
 // blocking I/O while waiting for incoming data from the TCP connection.
 func (t *tcpClient) ReadFromServer() {
 	defer func() {
-		t.controller.SignalToWs(ws.SignalToWsReq{UserID: t.userID, ConnectionID: t.connectionID})
+		t.signal.Signal(t.userID, t.connectionID)
 		t.conn.Close()
 		logger.Info("Gateway closed connection to tcp server")
 	}()

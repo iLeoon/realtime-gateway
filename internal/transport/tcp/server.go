@@ -19,7 +19,7 @@ import (
 // responsible for managing active WebSocket clients, receiving packets from
 // the gateway, applying server-side logic, and routing messages to the
 // appropriate clients.
-type tcpServer struct {
+type server struct {
 	conf *config.Config
 	// A map of connected client IDs to their active WebSocket
 	// sessions, allowing direct message delivery.
@@ -29,21 +29,20 @@ type tcpServer struct {
 }
 
 // Create a new instance of the TCP server.
-func NewTcpServer(conf *config.Config, ready chan<- struct{}) *tcpServer {
-	server := &tcpServer{
+func NewServer(conf *config.Config, ready chan<- struct{}) *server {
+	server := &server{
 		conf:    conf,
 		clients: make(map[uint32]net.Conn),
 		ready:   ready,
 	}
 	server.start()
 	return server
-
 }
 
 // Lanunches the server, this method must be invoked inside a separate
 // goroutine because it blocks while listening for incoming packets.
-func (t *tcpServer) start() {
-	listner, err := net.Listen("tcp", t.conf.TcpPort)
+func (s *server) start() {
+	listner, err := net.Listen("tcp", s.conf.TcpPort)
 	if err != nil {
 		logger.Error("An error occured on creating tcp server", "Error", err)
 		os.Exit(1)
@@ -52,7 +51,7 @@ func (t *tcpServer) start() {
 	logger.Info("TCP server is up and running")
 	defer listner.Close()
 
-	close(t.ready)
+	close(s.ready)
 
 	// Listening to the connections
 	for {
@@ -61,8 +60,8 @@ func (t *tcpServer) start() {
 			logger.Error("An error occured while trying to connect a client", "Error", err)
 			continue
 		}
-		go t.handleConn(conn)
-		go t.pingReq(conn)
+		go s.handleConn(conn)
+		go s.pingReq(conn)
 	}
 }
 
@@ -72,7 +71,7 @@ func (t *tcpServer) start() {
 //
 // It uses type assertion to convert the generic BuildPayload
 // its concrete SendMessagePacket type.
-func (t *tcpServer) handleConn(conn net.Conn) {
+func (s *server) handleConn(conn net.Conn) {
 	defer func() {
 		logger.Info("The connection to the TCP server is terminated")
 		conn.Close()
@@ -102,11 +101,11 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 		// its concrete *packet type
 		switch p := frame.Payload.(type) {
 		case *packets.ConnectPacket:
-			t.registerConnectionIDs(p, conn)
+			s.registerConnectionIDs(p, conn)
 		case *packets.DisconnectPacket:
-			t.unregisterConnectionIDs(p, conn)
+			s.unregisterConnectionIDs(p, conn)
 		case *packets.SendMessagePacket:
-			err := t.handleSendMessageReq(p)
+			err := s.handleSendMessageReq(p)
 			if err != nil {
 				logger.Error("Error on encoding response packet", "Error", err)
 				return
@@ -122,7 +121,7 @@ func (t *tcpServer) handleConn(conn net.Conn) {
 
 }
 
-func (t *tcpServer) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
+func (s *server) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
 	if err := conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
 		return fmt.Errorf("connection is unhealty: %w", err)
 	}
@@ -138,9 +137,9 @@ func (t *tcpServer) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
 }
 
 // handleSendMessage processes an inbound SendMessage packet.
-func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
+func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 	var recipient uint32
-	for id, _ := range t.clients {
+	for id, _ := range s.clients {
 		if id != pkt.ConnectionID {
 			recipient = id
 		}
@@ -151,25 +150,25 @@ func (t *tcpServer) handleSendMessageReq(pkt *packets.SendMessagePacket) error {
 		ResContent:     pkt.Content,
 	}
 
-	recipientConnection, ok := t.clients[recipient]
+	recipientConnection, ok := s.clients[recipient]
 	if !ok {
 		return fmt.Errorf("couldn't find the connectionID within the map")
 	}
 
-	err := t.writePacket(resPkt, recipientConnection)
+	err := s.writePacket(resPkt, recipientConnection)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *tcpServer) pingReq(conn net.Conn) error {
+func (s *server) pingReq(conn net.Conn) error {
 	ticker := time.NewTicker(pingTime)
 	pkt := &packets.PingPacket{}
 	defer ticker.Stop()
 
 	for range ticker.C {
-		err := t.writePacket(pkt, conn)
+		err := s.writePacket(pkt, conn)
 		if err != nil {
 			return err
 		}
@@ -179,16 +178,16 @@ func (t *tcpServer) pingReq(conn net.Conn) error {
 }
 
 // registerConnectionIDs add a connecteionID to the map associated with it's tcp connection.
-func (t *tcpServer) registerConnectionIDs(pkt *packets.ConnectPacket, conn net.Conn) {
-	t.mu.Lock()
-	t.clients[pkt.ConnectionID] = conn
-	t.mu.Unlock()
+func (s *server) registerConnectionIDs(pkt *packets.ConnectPacket, conn net.Conn) {
+	s.mu.Lock()
+	s.clients[pkt.ConnectionID] = conn
+	s.mu.Unlock()
 }
 
 // unRegisterConnectionIDs removes the connectionID from the map
-func (t *tcpServer) unregisterConnectionIDs(pkt *packets.DisconnectPacket, conn net.Conn) {
-	t.mu.Lock()
+func (s *server) unregisterConnectionIDs(pkt *packets.DisconnectPacket, conn net.Conn) {
+	s.mu.Lock()
 	conn.Close()
-	delete(t.clients, pkt.ConnectionID)
-	t.mu.Unlock()
+	delete(s.clients, pkt.ConnectionID)
+	s.mu.Unlock()
 }

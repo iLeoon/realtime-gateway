@@ -16,6 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type Handler interface {
+	Handle()
+}
+
 func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	rootMux := http.NewServeMux()
 	apiMux := http.NewServeMux()

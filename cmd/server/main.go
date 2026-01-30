@@ -35,27 +35,27 @@ func main() {
 		os.Exit(1)
 	}
 	// Run the TCP server.
-	go tcp.NewTcpServer(conf, tcpServerReady)
+	go tcp.NewServer(conf, tcpServerReady)
 
 	<-tcpServerReady
 
 	//Start new WebSocket server instance.
-	wsServer := websocket.NewWsServer(conf)
+	server := websocket.New(conf)
 
 	// Start new router instance and pass the WebSocket server connections map.
-	router := router.NewRouter(wsServer)
+	router := router.New(server)
 
 	// Start a new TCP Factory to manage connections between TCP server
 	// and WebSocket gateway.
-	tcpFactory := tcp.NewFactory(conf, router, wsServer)
+	tcpFactory := tcp.NewFactory(conf, router, server)
 
 	if err != nil {
 		logger.Error("Can't connect to the tcp server", "Error", err)
 		os.Exit(1)
 	}
 
-	// Retrive the ws handler and pass it to the http server.
-	wsHandler := wsServer.Start(tcpFactory)
+	// Retrive the handler then pass it to the http server.
+	wsHandler := server.Handle(tcpFactory)
 
 	http.Start(conf, db, wsHandler)
 

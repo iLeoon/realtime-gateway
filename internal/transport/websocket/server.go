@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"container/list"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -12,17 +13,21 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
-	"github.com/iLeoon/realtime-gateway/pkg/ws"
 )
 
-// WsServer manages all active WebSocket clients. It maintains a map of
+type signalToWsReq struct {
+	userId       string
+	connectionId uint32
+}
+
+// server manages all active WebSocket clients. It maintains a map of
 // connected sessions and uses register/unregister channels to handle
 // client lifecycle events
-type wsServer struct {
-	clients     map[string][]*Client
+type server struct {
+	clients     map[string][]*client
 	config      *config.Config
 	unregister  chan unregisterRequest
-	signalToWs  chan ws.SignalToWsReq
+	signalToWs  chan signalToWsReq
 	mu          sync.Mutex
 	idleList    *list.List
 	maxIdleTime time.Duration
@@ -31,16 +36,16 @@ type wsServer struct {
 
 // unregisterRequest is a custom struct that catches the reason for unregistering a client.
 type unregisterRequest struct {
-	client *Client
+	client *client
 	reason string
 }
 
 // Create new websocket server
-func NewWsServer(config *config.Config) *wsServer {
-	s := &wsServer{
-		clients:    make(map[string][]*Client),
+func New(config *config.Config) *server {
+	s := &server{
+		clients:    make(map[string][]*client),
 		unregister: make(chan unregisterRequest),
-		signalToWs: make(chan ws.SignalToWsReq),
+		signalToWs: make(chan signalToWsReq),
 		idleList:   list.New(),
 		config:     config,
 	}
@@ -49,20 +54,19 @@ func NewWsServer(config *config.Config) *wsServer {
 	return s
 }
 
-// Start constructs and returns an http.Handler responsible for handling
-// WebSocket upgrade requests. It upgrades incoming HTTP requests,
-// creates WebSocket clients, and registers them with the gateway.
-func (s *wsServer) Start(tcp session.InitiateSession) http.Handler {
+// Handle constructs and returns an http handler responsible for handling
+// webSocket requests then pass it to start
+func (s *server) Handle(tcp session.InitiateSession) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.initWsServer(w, r, tcp)
+		s.Start(w, r, tcp)
 	})
 }
 
-// initServerFunc upgrades the incoming HTTP request to a WebSocket
+// acceptWs upgrades the incoming HTTP request to a WebSocket
 // connection, initializes a new client session using the provided Session
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
-func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
+func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.InitiateSession) {
 	// the upgrader configuration
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -86,13 +90,13 @@ func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session 
 		return
 	}
 
-	tcpClient, err := session.NewTCPClient(userId, connectionID)
+	tcpClient, err := session.NewClient(userId, connectionID)
 	if err != nil {
 		logger.Error("Error on initializing a new tcp client for the connection between websocket and tcp server")
 		return
 	}
 
-	client := &Client{
+	client := &client{
 		userId:        userId,
 		conn:          conn,
 		send:          make(chan []byte, 256),
@@ -112,7 +116,25 @@ func (s *wsServer) initWsServer(w http.ResponseWriter, r *http.Request, session 
 	go client.limiterFaucet()
 }
 
-func (s *wsServer) registerClient(client *Client) {
+func (s *server) Send(userId string, connectionId uint32, message []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clients, ok := s.clients[userId]
+	if !ok {
+		return fmt.Errorf("no client was found with that userId: %d", userId)
+	}
+
+	for i := range clients {
+		if clients[i].connectionId == connectionId {
+			client := clients[i]
+			client.enqueue(message)
+			return nil
+		}
+	}
+	return fmt.Errorf("no clients were found with that connectionId: %d", connectionId)
+}
+
+func (s *server) registerClient(client *client) {
 	//Add the connectionID to the websocket map
 	s.clients[client.userId] = append(s.clients[client.userId], client)
 
@@ -126,7 +148,7 @@ func (s *wsServer) registerClient(client *Client) {
 
 // Unregister unregisters a connection to the clients map
 // and signal to the ws when an error occures to disconnect the user.
-func (s *wsServer) run() {
+func (s *server) run() {
 	for {
 		select {
 		case req := <-s.unregister:
@@ -154,19 +176,19 @@ func (s *wsServer) run() {
 			s.mu.Unlock()
 
 		case signal := <-s.signalToWs:
-			if clients, ok := s.clients[signal.UserID]; ok {
-				logger.Info("Signal received to kill connection", "ID", signal.ConnectionID, "UserID", signal.UserID)
+			if clients, ok := s.clients[signal.userId]; ok {
+				logger.Info("Signal received to kill connection", "ID", signal.connectionId, "UserID", signal.userId)
 
-				updatedClients := s.removeConnections(clients, signal.ConnectionID)
+				updatedClients := s.removeConnections(clients, signal.connectionId)
 				if len(updatedClients) == 0 {
-					delete(s.clients, signal.UserID)
+					delete(s.clients, signal.userId)
 				} else {
-					s.clients[signal.UserID] = updatedClients
+					s.clients[signal.userId] = updatedClients
 				}
 
-				for _, c := range clients {
-					if c.connectionId == signal.ConnectionID {
-						c.Terminate()
+				for i := range clients {
+					if clients[i].connectionId == signal.connectionId {
+						clients[i].Terminate()
 						break
 					}
 				}
@@ -175,44 +197,31 @@ func (s *wsServer) run() {
 	}
 }
 
-func (s *wsServer) removeConnections(clients []*Client, target uint32) []*Client {
+func (s *server) removeConnections(clients []*client, target uint32) []*client {
 	filtered := clients[:0]
-	for _, c := range clients {
-		if c.connectionId != target {
-			filtered = append(filtered, c)
+	for i := range clients {
+		if clients[i].connectionId != target {
+			filtered = append(filtered, clients[i])
 		}
 	}
 	return filtered
 }
 
-func (s *wsServer) GetClient(userID string, connectionID uint32) (ws.WsClient, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	clients, ok := s.clients[userID]
-	if !ok {
-		return nil, false
+func (s *server) Signal(userId string, connectionId uint32) {
+	s.signalToWs <- signalToWsReq{
+		userId:       userId,
+		connectionId: connectionId,
 	}
-
-	for _, client := range clients {
-		if client.connectionId == connectionID {
-			return client, true
-		}
-	}
-	return nil, false
 }
 
-func (s *wsServer) SignalToWs(req ws.SignalToWsReq) {
-	s.signalToWs <- req
-}
-
-func (s *wsServer) putConn(client *Client) {
+func (s *server) putConn(client *client) {
 	client.isActive = false
 	client.lastActiveAt = time.Now()
 
 	s.putConnLocked(client)
 }
 
-func (s *wsServer) putConnLocked(client *Client) {
+func (s *server) putConnLocked(client *client) {
 	// Check for duplicates.
 	if client.idleElement != nil {
 		s.idleList.Remove(client.idleElement)
@@ -231,7 +240,7 @@ func (s *wsServer) putConnLocked(client *Client) {
 
 }
 
-func (s *wsServer) reclaimConnLocked(client *Client) {
+func (s *server) reclaimConnLocked(client *client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if client.idleElement == nil {
@@ -243,7 +252,7 @@ func (s *wsServer) reclaimConnLocked(client *Client) {
 	client.idleElement = nil
 }
 
-func (s *wsServer) setMaxIdleTime(d time.Duration) {
+func (s *server) setMaxIdleTime(d time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if d < 0 {
@@ -266,7 +275,7 @@ func (s *wsServer) setMaxIdleTime(d time.Duration) {
 
 }
 
-func (s *wsServer) startReaper(d time.Duration) {
+func (s *server) startReaper(d time.Duration) {
 	const minInterval = time.Second
 
 	if d < minInterval {
@@ -292,8 +301,8 @@ func (s *wsServer) startReaper(d time.Duration) {
 		s.mu.Unlock()
 
 		if clients != nil {
-			for _, c := range clients {
-				s.unregister <- unregisterRequest{client: c, reason: "The connection has been idle for too long"}
+			for i := range clients {
+				s.unregister <- unregisterRequest{client: clients[i], reason: "The connection has been idle for too long"}
 			}
 		}
 
@@ -312,19 +321,19 @@ func (s *wsServer) startReaper(d time.Duration) {
 
 }
 
-func (s *wsServer) cleanReaperLocked(d time.Duration) (time.Duration, []*Client) {
+func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
 	if s.maxIdleTime <= 0 || s.idleList.Len() == 0 {
 		s.reaperCh = nil
 		return d, nil
 	}
 
-	var closing []*Client
+	var closing []*client
 	idleSince := time.Now().Add(-s.maxIdleTime)
 
 	var next *list.Element
 	for e := s.idleList.Front(); e != nil; e = next {
 		next = e.Next()
-		client := e.Value.(*Client)
+		client := e.Value.(*client)
 		if client.lastActiveAt.Before(idleSince) {
 			closing = append(closing, client)
 			s.idleList.Remove(e)

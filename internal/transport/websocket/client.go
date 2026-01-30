@@ -10,9 +10,6 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
-// WebSocket timing configuration.
-// These help detect dead or slow connections and keep the connection alive.
-// Check github.com/gorilla/websokcet chatapp example for more info.
 const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
@@ -20,16 +17,16 @@ const (
 	maxMessageSize = 512
 )
 
-// Client represents a single WebSocket connection between the browser and the server.
+// client represents a single WebSocket connection between the browser and the server.
 //
 // The WebSocket connection can only be written to from ONE goroutine.
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
-type Client struct {
+type client struct {
 	userId        string
 	conn          *websocket.Conn
 	send          chan []byte
-	server        *wsServer
+	server        *server
 	tcpClient     session.Session
 	connectionId  uint32
 	burstyLimiter chan time.Time
@@ -40,7 +37,7 @@ type Client struct {
 	isActive      bool
 }
 
-func (c *Client) readPump() {
+func (c *client) readPump() {
 	defer func() {
 		c.server.unregister <- unregisterRequest{client: c, reason: "Client side error"}
 		c.server.reclaimConnLocked(c)
@@ -85,7 +82,7 @@ func (c *Client) readPump() {
 
 }
 
-func (c *Client) writePump() {
+func (c *client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -125,7 +122,7 @@ func (c *Client) writePump() {
 
 }
 
-func (c *Client) limiterFaucet() {
+func (c *client) limiterFaucet() {
 	ticker := time.NewTicker(2 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -145,7 +142,7 @@ func (c *Client) limiterFaucet() {
 	}
 }
 
-func (c *Client) SendMessage(message []byte) {
+func (c *client) enqueue(message []byte) {
 	select {
 	case c.send <- message:
 		return
@@ -157,11 +154,7 @@ func (c *Client) SendMessage(message []byte) {
 	}
 }
 
-func (c *Client) GetConnectionID() uint32 {
-	return c.connectionId
-}
-
-func (c *Client) Terminate() {
+func (c *client) Terminate() {
 	c.once.Do(func() {
 		c.conn.Close()
 		close(c.send)

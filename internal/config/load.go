@@ -6,12 +6,12 @@ import (
 
 func Load() (*Config, error) {
 
-	cfg := &Config{}
+	conf := &Config{}
 
-	if err := env.Parse(cfg); err != nil {
+	if err := env.Parse(conf); err != nil {
 		return nil, err
 	}
 
-	return cfg, nil
+	return conf, nil
 
 }

@@ -39,5 +39,5 @@ type Session interface {
 }
 
 type InitiateSession interface {
-	NewTCPClient(string, uint32) (Session, error)
+	NewClient(string, uint32) (Session, error)
 }
