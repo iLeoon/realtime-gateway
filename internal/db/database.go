@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
@@ -29,15 +30,28 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		return nil, parseErr
 	}
 
+	parseConfig.MaxConns = 20
+	parseConfig.MinConns = 5
+	parseConfig.MaxConnIdleTime = time.Hour * 1
+	parseConfig.MaxConnLifetime = time.Hour
+	parseConfig.HealthCheckPeriod = 1 * time.Minute
+	parseConfig.ConnConfig.ConnectTimeout = 5 * time.Second
+
 	pool, err := pgxpool.NewWithConfig(context.Background(), parseConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := pool.Ping(context.Background()); err != nil {
+	pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
 		return nil, err
 	}
 
 	logger.Info("Database pool connection is ready.")
+
+	s := pool.Stat()
+
+	logger.Info("Pool health", "total", s.MaxConns(), "idle", s.IdleConns(), "acquired", s.AcquireCount())
 	return pool, nil
 }
