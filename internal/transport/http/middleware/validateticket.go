@@ -3,59 +3,41 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/iLeoon/realtime-gateway/internal/transport/http/helpers/token"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/pkg/ctx"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
 )
 
-func ValidateWsTicket(next http.Handler, s token.Service) http.Handler {
+type Service interface {
+	DecodeToken(jwtToken string) (userId string, err error)
+}
+
+func ValidateWsTicket(next http.Handler, s Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if the token is non-existent or not passed
+		// Check if the token is non-existent
 		jwtToken := r.URL.Query().Get("token")
 		if jwtToken == "" {
-			apiErr := apierror.Build(apierror.UnauthorizedRequest, "User is not authenticated",
-				apierror.WithTarget("token"),
-				apierror.WithInnerError(apierror.InnerError{Code: "MissingWsQueryTicket"}))
-
-			apierror.Send(w, http.StatusUnauthorized, apiErr)
+			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("QueryParameter", "MissingWsQueryTicket"))
 			return
 		}
 
 		userId, err := s.DecodeToken(jwtToken)
 		if err != nil {
-			switch err.Category {
-			case token.ClientError:
-				logger.Error("Invalid jwt token was passed by the client", "Error", err.Err)
-				apiErr := apierror.Build(apierror.UnauthorizedRequest, "User is not authenticated",
-					apierror.WithTarget("token"),
-					apierror.WithInnerError(apierror.InnerError{
-						Code: "InvalidOrExpiredToken",
-					}),
-				)
-				apierror.Send(w, http.StatusUnauthorized, apiErr)
+			logger.Error("unexpected error while decoding token", "error", err)
+			switch {
+			case errors.Is(err, errors.Client):
+				apiresponse.Send(w, http.StatusUnauthorized, apierror.InvalidToken())
 				return
-			case token.ServerError:
-				logger.Error("Internal server error on trying to decode the jwt token", "Error", err.Err)
-				apiErr := apierror.Build(apierror.InternalServerError, "Verification failed",
-					apierror.WithTarget("token"),
-					apierror.WithInnerError(apierror.InnerError{
-						Code: "UnexpectedInternalError",
-					}),
-				)
-				apierror.Send(w, http.StatusInternalServerError, apiErr)
+			case errors.Is(err, errors.Internal):
+				apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToDecodeToken())
 				return
 			default:
-				logger.Error("Unexpected/Unknown error on tyring to decode the jwt token", "Error", err.Err)
-				apiErr := apierror.Build(apierror.InternalServerError, "Verification failed For unkown reasons",
-					apierror.WithTarget("token"),
-					apierror.WithInnerError(apierror.InnerError{
-						Code: "UnexpectedInternalError",
-					}),
-				)
-				apierror.Send(w, http.StatusInternalServerError, apiErr)
+				apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToDecodeToken())
 				return
 			}
+
 		}
 
 		ctx := ctx.SetUserId(r.Context(), userId)
