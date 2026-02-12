@@ -12,7 +12,7 @@ import (
 type options struct {
 	fieldName       string
 	tagName         string
-	passedParamater string
+	passedParameter string
 	fieldValue      interface{}
 }
 
@@ -46,7 +46,7 @@ func buildErrValidationMessage(ves validator.ValidationErrors, data interface{})
 		msg := setValidationMessageOps(&options{
 			fieldName:       ve.Field(),
 			tagName:         ve.Tag(),
-			passedParamater: ve.Param(),
+			passedParameter: ve.Param(),
 			fieldValue:      ve.Value(),
 		})
 
@@ -69,8 +69,15 @@ func setValidationMessageOps(o *options) codeMessage {
 	case "gt":
 		return codeMessage{
 			code:    "InvalidValuePassed",
-			message: fmt.Sprintf("%s must be greater than %v: value passed %v", o.fieldName, o.passedParamater, o.fieldValue),
+			message: fmt.Sprintf("%s must be greater than %v: value passed %v", o.fieldName, o.passedParameter, o.fieldValue),
 		}
+
+	case "oneof":
+		return codeMessage{
+			code:    "InvalidValuePassed",
+			message: fmt.Sprintf("%s must be either (%v): value passed %v", o.fieldName, o.passedParameter, o.fieldValue),
+		}
+
 	default:
 		return codeMessage{
 			code:    "InvalidFieldData",
