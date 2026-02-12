@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/internal/protocol/errors"
 )
 
 // ConnectPacket represents a connection request sent by a client when it

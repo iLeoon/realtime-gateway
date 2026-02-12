@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 
-	prtErr "github.com/iLeoon/realtime-gateway/pkg/protocol/errors"
-	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	prtErr "github.com/iLeoon/realtime-gateway/internal/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 )
 
 const (

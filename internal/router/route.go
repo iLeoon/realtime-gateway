@@ -2,7 +2,7 @@ package router
 
 import (
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 )
 
 // Router forwards decoded packets from the TCP engine to the appropriate

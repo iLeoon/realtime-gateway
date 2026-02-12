@@ -10,7 +10,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
-	"github.com/iLeoon/realtime-gateway/pkg/ctx"
+	"github.com/iLeoon/realtime-gateway/internal/ctx"
 )
 
 type Service interface {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/pkg/logger"
-	"github.com/iLeoon/realtime-gateway/pkg/protocol"
-	"github.com/iLeoon/realtime-gateway/pkg/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/internal/protocol"
+	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
