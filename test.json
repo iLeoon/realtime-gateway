@@ -1,0 +1,6 @@
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "provider": "google",
+  "provider_id": "123456789"
+}
