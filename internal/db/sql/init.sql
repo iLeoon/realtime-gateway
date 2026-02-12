@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 	creator_id INT NOT NULL,
 	conversation_type conversation_type NOT NULL,
 	last_message_id INT NULL,
+	created_at TIMESTAMP DEFAULT NOW(),
 
 	PRIMARY KEY (conversation_id),
 	FOREIGN KEY (creator_id) REFERENCES users (user_id)
