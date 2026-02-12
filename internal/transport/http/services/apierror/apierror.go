@@ -1,23 +1,26 @@
 package apierror
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
 
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Code string
 
 const (
-	BadRequest          Code = "BadRequest"
-	ForbiddenRequest    Code = "Forbidden"
-	UnauthorizedRequest Code = "UnauthorizedRequest"
-	NotFoundRequest     Code = "NotFoundRequest"
-	InternalServerError Code = "InternalServerError"
-	StatusNotAccepted   Code = "StatusNotAccepted"
-	BadArgument         Code = "BadArgumet"
+	BadRequestCode          Code = "BadRequest"
+	ForbiddenRequestCode    Code = "ForbiddenRequest"
+	UnAuthorizedRequestCode Code = "UnauthorizedRequest"
+	NotFoundRequestCode     Code = "NotFoundRequest"
+	InternalServerErrorCode Code = "InternalServerError"
+	StatusNotAcceptedCode   Code = "StatusNotAccepted"
+	BadArgumentCode         Code = "BadArgumet"
+	BadGatewayCode          Code = "BadGateway"
+	GatewayTimeout          Code = "Timeout"
+	ServiceUnavailable      Code = "ServiceUnavailable"
 )
 
 // APIError follows the Microsoft REST API Guidelines for error condition responses.
@@ -46,40 +49,11 @@ type InnerError struct {
 }
 
 type InnerErrorDetails struct {
-	Code   string `json:"code"`
-	MinLen string `json:"minLength"`
-	MaxLen string `json:"maxLength"`
+	Code       string             `json:"code"`
+	InnerError *InnerErrorDetails `json:"innererror,omitempty"`
 }
 
 type ErrorOptions func(*APIError)
-
-func Send(w http.ResponseWriter, statusCode int, apiErr *APIError) {
-	buf := new(bytes.Buffer)
-	if err := json.NewEncoder(buf).Encode(apiErr); err != nil {
-		logger.Error("Failed to encode the response error", "Error", err.Error())
-		serverErr := APIError{
-			Error: ErrorBody{
-				Code:    "InternalServerError",
-				Message: "Unexpected error occured while trying to process response",
-				Target:  "RespErr",
-				InnerError: &InnerError{
-					Code: "FaildToEncodeRespError",
-				},
-			},
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(serverErr)
-		return
-	}
-
-	w.WriteHeader(statusCode)
-	w.Header().Set("Content-Type", "application/json")
-
-	_, err := w.Write(buf.Bytes())
-	if err != nil {
-		logger.Error("Faild to write the the response", "Error", err.Error())
-	}
-}
 
 func Build(code Code, message string, opts ...ErrorOptions) *APIError {
 	apiErr := &APIError{
@@ -88,7 +62,6 @@ func Build(code Code, message string, opts ...ErrorOptions) *APIError {
 			Message: message,
 		},
 	}
-
 	for _, opt := range opts {
 		opt(apiErr)
 	}
@@ -109,8 +82,65 @@ func WithDetails(details []ErrorDetails) ErrorOptions {
 
 }
 
-func WithInnerError(innererror InnerError) ErrorOptions {
+func WithInnerError(code string) ErrorOptions {
 	return func(e *APIError) {
-		e.Error.InnerError = &innererror
+		e.Error.InnerError = &InnerError{Code: code}
 	}
+}
+
+func WithInnerErrorDetails(code string, args ...string) ErrorOptions {
+	return func(e *APIError) {
+		e.Error.InnerError.InnerError = &InnerErrorDetails{Code: code}
+	}
+}
+
+// ErrorMapper represents mapping the lower-level errors related to the database
+// to the higher-level errors
+func ErrorMapper(err error, target string) (*APIError, int) {
+	var apiErr *APIError
+	var statusCode int
+	switch {
+	case errors.Is(err, errors.NotFound):
+		apiErr = NoDataFound(target)
+		statusCode = http.StatusNotFound
+	case errors.Is(err, errors.Internal):
+		apiErr = UnexpectedDatabaseFailure(InternalServerErrorCode, target, "WrongSyntax")
+		statusCode = http.StatusInternalServerError
+	case errors.Is(err, errors.TimeOut):
+		apiErr = TimeOutError(target)
+		statusCode = http.StatusGatewayTimeout
+	case errors.Is(err, errors.ServiceUnavailable):
+		apiErr = UnexpectedDatabaseFailure(ServiceUnavailable, target, "ServiceIsUnavilableDueToManyRequests")
+		statusCode = http.StatusServiceUnavailable
+	case errors.Is(err, errors.Client):
+		apiErr = UnexpectedDatabaseFailure(BadRequestCode, target, "UserIsPassingInvalidData")
+		statusCode = http.StatusBadRequest
+	case errors.Is(err, errors.Network):
+		apiErr = UnexpectedDatabaseFailure(BadGatewayCode, target, "NetworkFailure")
+		statusCode = http.StatusBadGateway
+	}
+	return apiErr, statusCode
+}
+
+func DatabaseErrorClassification(path errors.PathName, op errors.Op, err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.B(path, op, errors.NotFound, err)
+	}
+
+	switch e := err.(type) {
+	case *pgconn.PgError:
+		switch e.Code {
+		case "08006", "08001", "08000", "08003", "08007":
+			return errors.B(path, op, errors.Network, err)
+		case "08004", "53300":
+			return errors.B(path, op, errors.ServiceUnavailable, err)
+		case "57014":
+			return errors.B(path, op, errors.TimeOut, err)
+		case "23505", "23503":
+			return errors.B(path, op, errors.Client, err)
+		default:
+			return errors.B(path, op, errors.Internal, err)
+		}
+	}
+	return errors.B(path, op, errors.Internal, err)
 }
