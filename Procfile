@@ -1,2 +1,2 @@
 release: bin/migrate
-web: sleep 3600
+web: bin/placeholder
