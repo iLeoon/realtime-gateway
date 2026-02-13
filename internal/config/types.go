@@ -9,7 +9,6 @@ type Config struct {
 	PostgreSQL
 	JWT
 	CORS
-	Scalingo
 }
 
 type TCP struct {
@@ -27,11 +26,14 @@ type GoogleOAuth struct {
 }
 
 type PostgreSQL struct {
-	DBHost     string `env:"POSTGRES_HOST,required"`
-	DBPort     int    `env:"POSTGRES_PORT,required"`
-	DBUser     string `env:"POSTGRES_USER,required"`
-	DBPassword string `env:"POSTGRES_PASSWORD,required"`
-	DBName     string `env:"POSTGRES_DATABASE,required"`
+	DBHost     string `env:"POSTGRES_HOST"`
+	DBPort     int    `env:"POSTGRES_PORT"`
+	DBUser     string `env:"POSTGRES_USER"`
+	DBPassword string `env:"POSTGRES_PASSWORD"`
+	DBName     string `env:"POSTGRES_DATABASE"`
+
+	DatabaseURL string `env:"DATABASE_URL"`
+	TestDBURL   string `env:"TEST_DB"`
 }
 
 type JWT struct {
@@ -41,8 +43,4 @@ type JWT struct {
 
 type CORS struct {
 	FrontEndOrigin string `env:"FRONTEND_ORIGIN,required"`
-}
-
-type Scalingo struct {
-	DatabaseURL string `env:"SCALINGO_POSTGRESQL_URL"`
 }

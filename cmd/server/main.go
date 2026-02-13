@@ -16,24 +16,22 @@ func main() {
 	// A ready channel that unblocks once the tcp server is up and running.
 	tcpServerReady := make(chan struct{})
 
-	// Load the configuration variables.
-	conf, err := config.Load()
-
 	// Start the logger.
 	logger.Initlogger()
 
+	// Load the configuration variables.
+	conf, err := config.Load()
+	if err != nil {
+		logger.Error("couldn't load the configurations", "error", err)
+		os.Exit(1)
+	}
 	// Connect to database.
 	db, dbErr := db.Connect(conf)
-
 	if dbErr != nil {
-		logger.Error("Error on trying to connect to the database", "Error", dbErr)
+		logger.Error("error on trying to connect to the database", "error", dbErr)
 		os.Exit(1)
 	}
 
-	if err != nil {
-		logger.Error("can't load configuration", "Error", err)
-		os.Exit(1)
-	}
 	// Run the TCP server.
 	go tcp.NewServer(conf, tcpServerReady)
 
@@ -48,11 +46,6 @@ func main() {
 	// Start a new TCP Factory to manage connections between TCP server
 	// and WebSocket gateway.
 	tcpFactory := tcp.NewFactory(conf, router, server)
-
-	if err != nil {
-		logger.Error("Can't connect to the tcp server", "Error", err)
-		os.Exit(1)
-	}
 
 	// Retrive the handler then pass it to the http server.
 	wsHandler := server.Handle(tcpFactory)
