@@ -9,6 +9,7 @@ type Config struct {
 	PostgreSQL
 	JWT
 	CORS
+	Scalingo
 }
 
 type TCP struct {
@@ -40,4 +41,8 @@ type JWT struct {
 
 type CORS struct {
 	FrontEndOrigin string `env:"FRONTEND_ORIGIN,required"`
+}
+
+type Scalingo struct {
+	DatabaseURL string `env:"SCALINGO_POSTGRESQL_URL"`
 }
