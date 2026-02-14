@@ -3,8 +3,9 @@ package db
 import (
 	"embed"
 	"fmt"
+	"strings"
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
@@ -17,7 +18,10 @@ func RunMigrations(databaseURL string) error {
 		return fmt.Errorf("failed to load migration files: %w", err)
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", d, databaseURL)
+	// Convert postgres:// to pgx5:// for pgx/v5 driver
+	migrationURL := strings.Replace(databaseURL, "postgres://", "pgx5://", 1)
+
+	m, err := migrate.NewWithSourceInstance("iofs", d, migrationURL)
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
 	}
