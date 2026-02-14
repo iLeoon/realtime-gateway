@@ -1,2 +1,2 @@
 release: bin/migrate
-web: bin/placeholder
+web: bin/server

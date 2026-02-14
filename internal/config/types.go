@@ -12,17 +12,17 @@ type Config struct {
 }
 
 type TCP struct {
-	TcpPort string `env:"TCP_SERVER_PORT"`
+	TcpPort string `env:"TCP_SERVER_PORT,required"`
 }
 
 type HttpServer struct {
-	HttpPort string `env:"HTTP_PORT"`
+	HttpPort string `env:"HTTP_PORT,required"`
 }
 
 type GoogleOAuth struct {
-	GoogleClientID     string `env:"GOOGLE_CLIENT_ID"`
-	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET"`
-	RedirectURL        string `env:"REDIRECT_URL"`
+	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
+	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,required"`
+	RedirectURL        string `env:"REDIRECT_URL,required"`
 }
 
 type PostgreSQL struct {
@@ -37,10 +37,10 @@ type PostgreSQL struct {
 }
 
 type JWT struct {
-	JwtSecretKey string `env:"JWT_SECRET_KEY"`
-	JwtIssuer    string `env:"JWT_ISSUER"`
+	JwtSecretKey string `env:"JWT_SECRET_KEY,required"`
+	JwtIssuer    string `env:"JWT_ISSUER,required"`
 }
 
 type CORS struct {
-	FrontEndOrigin string `env:"FRONTEND_ORIGIN"`
+	FrontEndOrigin string `env:"FRONTEND_ORIGIN,required"`
 }

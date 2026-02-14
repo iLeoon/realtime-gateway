@@ -17,7 +17,7 @@ func main() {
 	}
 	fmt.Println("Starting database migrations...")
 
-	if err := db.RunMigrations(conf.TestDBURL); err != nil {
+	if err := db.RunMigrations(conf.DatabaseURL); err != nil {
 		fmt.Fprintf(os.Stderr, "Migration failed: %v\n", err)
 		os.Exit(1)
 	}
