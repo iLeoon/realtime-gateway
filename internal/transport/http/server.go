@@ -66,5 +66,8 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
 
 	logger.Info("The http server is up and running..")
-	http.ListenAndServe(conf.HttpPort, rootMux)
+	err := http.ListenAndServe(conf.HttpPort, rootMux)
+	if err != nil {
+		logger.Error("coudln't connect to the http server", "error", err)
+	}
 }
