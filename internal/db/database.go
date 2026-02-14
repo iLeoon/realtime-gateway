@@ -40,14 +40,14 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 	parseConfig.MaxConnIdleTime = time.Hour * 1
 	parseConfig.MaxConnLifetime = time.Hour
 	parseConfig.HealthCheckPeriod = 1 * time.Minute
-	parseConfig.ConnConfig.ConnectTimeout = 5 * time.Second
+	parseConfig.ConnConfig.ConnectTimeout = 60 * time.Second
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), parseConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := pool.Ping(pingCtx); err != nil {
 		return nil, err
