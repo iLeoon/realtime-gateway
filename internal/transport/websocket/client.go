@@ -6,9 +6,15 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
+
+type Server interface {
+	reclaimConnLocked(c *client)
+	putConn(c *client)
+	UnregisterRequest(c *client, reason string)
+}
 
 const (
 	writeWait      = 10 * time.Second
@@ -23,12 +29,12 @@ const (
 // Because the server may need to send messages from many goroutines,
 // We funnel all outgoing messages into `client.send`.
 type client struct {
-	userId        string
+	userID        string
 	conn          *websocket.Conn
 	send          chan []byte
-	server        *server
+	server        Server
 	tcpClient     session.Session
-	connectionId  uint32
+	connectionID  uint32
 	burstyLimiter chan time.Time
 	done          chan struct{}
 	once          sync.Once
@@ -39,7 +45,7 @@ type client struct {
 
 func (c *client) readPump() {
 	defer func() {
-		c.server.unregister <- unregisterRequest{client: c, reason: "Client side error"}
+		c.server.UnregisterRequest(c, "client side error")
 		c.server.reclaimConnLocked(c)
 		c.conn.Close()
 	}()
@@ -53,11 +59,11 @@ func (c *client) readPump() {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Info("Client disconnected", "ClientID", c.connectionId)
+				log.Info.Println("Client disconnected", "ClientID", c.connectionID)
 			}
 
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Error("Unexpected error shutting down websocket server", "Error", err)
+				log.Error.Println("Unexpected error shutting down websocket server", "Error", err)
 			}
 			return
 		}
@@ -73,7 +79,7 @@ func (c *client) readPump() {
 		// Forward the messages to WriteToServer with the proper data.
 		readErr := c.tcpClient.WriteToServer(message)
 		if readErr != nil {
-			logger.Error("Error on trying to read message from browser", "Error", readErr)
+			log.Error.Println("Error on trying to read message from browser", "Error", readErr)
 			return
 		}
 		// Mark the connection inactive after reading.
@@ -100,11 +106,11 @@ func (c *client) writePump() {
 
 			msg, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				logger.Error("An error while tring to write the message", "Error", err)
+				log.Error.Println("An error while tring to write the message", "Error", err)
 			}
 			msg.Write(message)
 			if err := msg.Close(); err != nil {
-				logger.Error("Failed to close writer", "Error", err)
+				log.Error.Println("Failed to close writer", "Error", err)
 				return
 			}
 
@@ -142,13 +148,13 @@ func (c *client) limiterFaucet() {
 	}
 }
 
-func (c *client) enqueue(message []byte) {
+func (c *client) Enqueue(message []byte) {
 	select {
 	case c.send <- message:
 		return
 
 	default:
-		c.server.unregister <- unregisterRequest{client: c, reason: "Buffer full(Backpressure)"}
+		c.server.UnregisterRequest(c, "buffer is full(backpressure)")
 		return
 
 	}
@@ -160,4 +166,8 @@ func (c *client) Terminate() {
 		close(c.send)
 		close(c.done)
 	})
+}
+
+func (c *client) FetchConnectionID() uint32 {
+	return c.connectionID
 }

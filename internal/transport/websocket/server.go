@@ -11,21 +11,27 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/ctx"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
+type Client interface {
+	Enqueue(message []byte)
+	Terminate()
+	FetchConnectionID() uint32
+}
+
 type signalToWsReq struct {
-	userId       string
-	connectionId uint32
+	userID       string
+	connectionID uint32
 }
 
 // server manages all active WebSocket clients. It maintains a map of
 // connected sessions and uses register/unregister channels to handle
 // client lifecycle events
 type server struct {
-	clients     map[string][]*client
-	config      *config.Config
+	clients     map[string][]Client
+	c           *config.Config
 	unregister  chan unregisterRequest
 	signalToWs  chan signalToWsReq
 	mu          sync.Mutex
@@ -41,13 +47,13 @@ type unregisterRequest struct {
 }
 
 // Create new websocket server
-func New(config *config.Config) *server {
+func New(c *config.Config) *server {
 	s := &server{
-		clients:    make(map[string][]*client),
+		clients:    make(map[string][]Client),
 		unregister: make(chan unregisterRequest),
 		signalToWs: make(chan signalToWsReq),
 		idleList:   list.New(),
-		config:     config,
+		c:          c,
 	}
 	s.setMaxIdleTime(30 * time.Second)
 	go s.run()
@@ -62,7 +68,7 @@ func (s *server) Handle(tcp session.InitiateSession) http.Handler {
 	})
 }
 
-// acceptWs upgrades the incoming HTTP request to a WebSocket
+// Start upgrades the incoming HTTP request to a WebSocket
 // connection, initializes a new client session using the provided Session
 // implementation, registers the client, and starts the read and write pump
 // goroutines for message handling.
@@ -72,38 +78,39 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			return s.config.FrontEndOrigin == r.Header.Get("Origin")
+			fmt.Println(s.c.FrontEndOrigin)
+			return s.c.FrontEndOrigin == r.Header.Get("Origin")
 		},
 	}
 	connectionID := rand.Uint32()
-	userId, ok := ctx.UserId(r.Context())
+	userID, ok := ctx.UserId(r.Context())
 
 	if !ok {
-		logger.Error("Couldn't extract the ID from the request")
+		log.Error.Println("Couldn't extract the ID from the request")
 		return
 	}
 
 	// upgrade the websocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logger.Error("Error on upgrading raw tcp connection into websocekt", "Error", err)
+		log.Error.Println("Error on upgrading raw tcp connection into websocekt", "Error", err)
 		return
 	}
 
-	tcpClient, err := session.NewClient(userId, connectionID)
+	tcpClient, err := session.NewClient(userID, connectionID)
 	if err != nil {
-		logger.Error("Error on initializing a new tcp client for the connection between websocket and tcp server")
+		log.Error.Println("Error on initializing a new tcp client for the connection between websocket and tcp server")
 		return
 	}
 
 	client := &client{
-		userId:        userId,
+		userID:        userID,
 		conn:          conn,
 		send:          make(chan []byte, 256),
 		server:        s,
 		tcpClient:     tcpClient,
 		burstyLimiter: make(chan time.Time, 3),
-		connectionId:  connectionID,
+		connectionID:  connectionID,
 		done:          make(chan struct{}),
 	}
 	s.mu.Lock()
@@ -116,33 +123,32 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 	go client.limiterFaucet()
 }
 
-func (s *server) Send(userId string, connectionId uint32, message []byte) error {
+func (s *server) Send(userID string, connectionID uint32, message []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	clients, ok := s.clients[userId]
+	clients, ok := s.clients[userID]
 	if !ok {
-		return fmt.Errorf("no client was found with that userId: %d", userId)
+		return fmt.Errorf("no client was found with that userID: %d", userID)
 	}
 
 	for i := range clients {
-		if clients[i].connectionId == connectionId {
-			client := clients[i]
-			client.enqueue(message)
+		if clients[i].FetchConnectionID() == connectionID {
+			clients[i].Enqueue(message)
 			return nil
 		}
 	}
-	return fmt.Errorf("no clients were found with that connectionId: %d", connectionId)
+	return fmt.Errorf("no clients were found with that connectionID: %d", connectionID)
 }
 
-func (s *server) registerClient(client *client) {
+func (s *server) registerClient(c *client) {
 	//Add the connectionID to the websocket map
-	s.clients[client.userId] = append(s.clients[client.userId], client)
+	s.clients[c.userID] = append(s.clients[c.userID], c)
 
 	//Add the connectionID to the tcp server map
-	err := client.tcpClient.OnConnect()
+	err := c.tcpClient.OnConnect()
 	if err != nil {
-		logger.Error("Couldn't register this client", "ClientID", "Error", client.connectionId, err)
-		delete(s.clients, client.userId)
+		log.Error.Println("Couldn't register this client", "ClientID", "Error", c.connectionID, err)
+		delete(s.clients, c.userID)
 	}
 }
 
@@ -153,21 +159,21 @@ func (s *server) run() {
 		select {
 		case req := <-s.unregister:
 			s.mu.Lock()
-			if clients, ok := s.clients[req.client.userId]; ok {
-				logger.Info("Terminating the connection", "ID", req.client.connectionId, "Reason", req.reason)
+			if clients, ok := s.clients[req.client.userID]; ok {
+				log.Info.Println("Terminating the connection", "ID", req.client.connectionID, "Reason", req.reason)
 
 				//Remove the connectionID from the websocket map
-				clients = s.removeConnections(clients, req.client.connectionId)
+				clients = s.removeConnections(clients, req.client.connectionID)
 				if len(clients) == 0 {
-					delete(s.clients, req.client.userId)
+					delete(s.clients, req.client.userID)
 				} else {
-					s.clients[req.client.userId] = clients
+					s.clients[req.client.userID] = clients
 				}
 
 				//Remove the connectionID from the tcp server map
 				err := req.client.tcpClient.OnDisConnect()
 				if err != nil {
-					logger.Error("Couldn't unregister this client", "ClientID", req.client.connectionId, "Error", err)
+					log.Error.Println("Couldn't unregister this client", "ClientID", req.client.connectionID, "Error", err)
 				}
 
 				// permanently close the connection.
@@ -176,18 +182,18 @@ func (s *server) run() {
 			s.mu.Unlock()
 
 		case signal := <-s.signalToWs:
-			if clients, ok := s.clients[signal.userId]; ok {
-				logger.Info("Signal received to kill connection", "ID", signal.connectionId, "UserID", signal.userId)
+			if clients, ok := s.clients[signal.userID]; ok {
+				log.Info.Println("Signal received to kill connection", "ID", signal.connectionID, "UserID", signal.userID)
 
-				updatedClients := s.removeConnections(clients, signal.connectionId)
+				updatedClients := s.removeConnections(clients, signal.connectionID)
 				if len(updatedClients) == 0 {
-					delete(s.clients, signal.userId)
+					delete(s.clients, signal.userID)
 				} else {
-					s.clients[signal.userId] = updatedClients
+					s.clients[signal.userID] = updatedClients
 				}
 
 				for i := range clients {
-					if clients[i].connectionId == signal.connectionId {
+					if clients[i].FetchConnectionID() == signal.connectionID {
 						clients[i].Terminate()
 						break
 					}
@@ -197,20 +203,27 @@ func (s *server) run() {
 	}
 }
 
-func (s *server) removeConnections(clients []*client, target uint32) []*client {
+func (s *server) removeConnections(clients []Client, target uint32) []Client {
 	filtered := clients[:0]
 	for i := range clients {
-		if clients[i].connectionId != target {
+		if clients[i].FetchConnectionID() != target {
 			filtered = append(filtered, clients[i])
 		}
 	}
 	return filtered
 }
 
-func (s *server) Signal(userId string, connectionId uint32) {
+func (s *server) Signal(userID string, connectionID uint32) {
 	s.signalToWs <- signalToWsReq{
-		userId:       userId,
-		connectionId: connectionId,
+		userID:       userID,
+		connectionID: connectionID,
+	}
+}
+
+func (s *server) UnregisterRequest(c *client, reason string) {
+	s.unregister <- unregisterRequest{
+		client: c,
+		reason: reason,
 	}
 }
 
@@ -346,4 +359,8 @@ func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
 		}
 	}
 	return d, closing
+}
+
+func (s *server) fetchClient(userID string, connectionID uint32) {
+
 }
