@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/internal/protocol"
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 // TcpServer represents the central processing engine of the system. It is
@@ -44,11 +44,11 @@ func NewServer(conf *config.Config, ready chan<- struct{}) *server {
 func (s *server) start() {
 	listner, err := net.Listen("tcp", s.conf.TcpPort)
 	if err != nil {
-		logger.Error("An error occured on creating tcp server", "Error", err)
+		log.Error.Fatal("An error occured on creating tcp server", "Error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("TCP server is up and running")
+	log.Info.Println("TCP server is up and running")
 	defer listner.Close()
 
 	close(s.ready)
@@ -57,7 +57,7 @@ func (s *server) start() {
 	for {
 		conn, err := listner.Accept()
 		if err != nil {
-			logger.Error("An error occured while trying to connect a client", "Error", err)
+			log.Error.Println("An error occured while trying to connect a client", "Error", err)
 			continue
 		}
 		go s.handleConn(conn)
@@ -73,7 +73,7 @@ func (s *server) start() {
 // its concrete SendMessagePacket type.
 func (s *server) handleConn(conn net.Conn) {
 	defer func() {
-		logger.Info("The connection to the TCP server is terminated")
+		log.Info.Println("The connection to the TCP server is terminated")
 		conn.Close()
 	}()
 
@@ -84,7 +84,7 @@ func (s *server) handleConn(conn net.Conn) {
 		frame, err := protocol.DecodeFrame(conn)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				logger.Info("TCP connection is closed by peer(gateway)")
+				log.Info.Println("TCP connection is closed by peer(gateway)")
 				return
 
 			}
@@ -92,7 +92,7 @@ func (s *server) handleConn(conn net.Conn) {
 				return
 			}
 
-			logger.Error("Unexpected tcp read error", "error", err)
+			log.Error.Println("Unexpected tcp read error", "error", err)
 			return
 		}
 
@@ -107,16 +107,16 @@ func (s *server) handleConn(conn net.Conn) {
 		case *packets.SendMessagePacket:
 			err := s.handleSendMessageReq(p)
 			if err != nil {
-				logger.Error("Error on encoding response packet", "Error", err)
+				log.Error.Println("Error on encoding response packet", "Error", err)
 				return
 			}
 		case *packets.PongPacket:
 			// We don't do anything we just renter the loop.
 		default:
-			logger.Error("Invalid packet type from gateway: %T", p)
+			log.Error.Println("Invalid packet type from gateway: %T", p)
 			return
 		}
-		logger.Debug("Decode packet", "packet", frame.Payload.String())
+		log.Info.Println("Decode packet", "packet", frame.Payload.String())
 	}
 
 }

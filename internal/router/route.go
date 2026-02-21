@@ -1,8 +1,8 @@
 package router
 
 import (
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 // Router forwards decoded packets from the TCP engine to the appropriate
@@ -43,7 +43,7 @@ func (r *router) handleResponseMessage(pkt *packets.ResponseMessagePacket, userI
 
 	err := r.router.Send(userID, recipient, message)
 	if err != nil {
-		logger.Error("couldn't find the client", "Error", err)
+		log.Error.Println("couldn't find the client", "Error", err)
 		return
 	}
 

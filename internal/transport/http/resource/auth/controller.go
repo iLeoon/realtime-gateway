@@ -9,7 +9,7 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )
@@ -82,7 +82,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 	if err := r.URL.Query().Get("error"); err != "" {
 		errorDes := r.URL.Query().Get("error_description")
 		statusCode, apiErr := h.service.FrontChannelError(err)
-		logger.Error("an error occured while the user trying to authenticate", "error_code", err, "error_description", errorDes)
+		log.Error.Println("an error occured while the user trying to authenticate", "error_code", err, "error_description", errorDes)
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
@@ -100,7 +100,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 
 	verifier, stateCookie, err := h.service.RequiredCookies(r)
 	if err != nil {
-		logger.Error("Error", err)
+		log.Error.Println("Error", err)
 		apiErr := apierror.Build(apierror.BadRequestCode,
 			"missing required parameters",
 			apierror.WithTarget("OAuthCookies"),
@@ -110,7 +110,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if stateCookie.Value != state {
-		logger.Error("invalid state cookie is being used", "state_cookie", stateCookie.Value, "used_state", state)
+		log.Error.Println("invalid state cookie is being used", "state_cookie", stateCookie.Value, "used_state", state)
 		apiErr := apierror.Build(apierror.ForbiddenRequestCode,
 			"using invalid parameters",
 			apierror.WithTarget("state"),
@@ -122,14 +122,14 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 	token, err := h.service.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
 		statusCode, apiErr, err := h.service.BackChannelError(err)
-		logger.Error("unexpected error occurred", "error", err)
+		log.Error.Println("unexpected error occurred", "error", err)
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
 
 	rawIdToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		logger.Error("expected openid in the configuration scopes")
+		log.Error.Println("expected openid in the configuration scopes")
 		apiErr := apierror.Build(apierror.InternalServerErrorCode,
 			"authentication has failed", apierror.WithTarget("idtoken"),
 			apierror.WithInnerError("MissingOpenIdInTheConfigScopes"))
@@ -139,7 +139,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 
 	payload, err := idtoken.Validate(r.Context(), rawIdToken, h.service.GoogleClient().ClientID)
 	if err != nil {
-		logger.Error("identity tokne is either valid or expired", err, "idtoken", payload)
+		log.Error.Println("identity tokne is either valid or expired", err, "idtoken", payload)
 
 		apiErr := apierror.Build(apierror.BadRequestCode, "the identity token is invalid",
 			apierror.WithTarget("idtoken"),

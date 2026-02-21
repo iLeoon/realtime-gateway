@@ -5,7 +5,7 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -79,7 +79,7 @@ func (r *repository) CreateOrUpdateUser(ctx context.Context, pi ProviderIdentity
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 
 	}
-	logger.Info(`Created a new user with their corresponding provider into the database`)
+	log.Info.Println(`Created a new user with their corresponding provider into the database`)
 
 	err = tx.Commit(ctx)
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
@@ -9,26 +10,32 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http"
 	"github.com/iLeoon/realtime-gateway/internal/transport/tcp"
 	"github.com/iLeoon/realtime-gateway/internal/transport/websocket"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 func main() {
 	// A ready channel that unblocks once the tcp server is up and running.
 	tcpServerReady := make(chan struct{})
 
-	// Start the logger.
-	logger.Initlogger()
+	logLevel := flag.String("log", "info", `usage: -log=[level]    level: [info - debug - error]`)
+	flag.Parse()
+	if *logLevel == "" {
+		log.Fatal("invalid usage for log level")
+		os.Exit(1)
+	}
+	log.SetLevel(*logLevel)
 
 	// Load the configuration variables.
 	conf, err := config.Load()
+
 	if err != nil {
-		logger.Error("couldn't load the configurations", "error", err)
+		log.Fatal("faild to load configuration variables", err)
 		os.Exit(1)
 	}
 	// Connect to database.
 	db, dbErr := db.Connect(conf)
 	if dbErr != nil {
-		logger.Error("error on trying to connect to the database", "error", dbErr)
+		log.Fatal("error on trying to connect to the database", "error", dbErr)
 		os.Exit(1)
 	}
 

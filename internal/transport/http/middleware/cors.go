@@ -1,8 +1,9 @@
 package middleware
 
 import (
-	"github.com/iLeoon/realtime-gateway/internal/config"
 	"net/http"
+
+	"github.com/iLeoon/realtime-gateway/internal/config"
 )
 
 func Cors(next http.Handler, config *config.Config) http.Handler {

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Repository interface {
@@ -29,7 +29,7 @@ func (s *service) GetUser(userId string, ctx context.Context) (*User, *apierror.
 	defer cancel()
 	user, err := s.repo.GetUserById(userId, ctx)
 	if err != nil {
-		logger.Error("retrieve user failed", "error", err)
+		log.Error.Println("retrieve user failed", "error", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "user")
 		return nil, apiErr, statusCode
 	}

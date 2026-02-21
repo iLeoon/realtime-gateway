@@ -3,10 +3,10 @@ package websocket
 import (
 	"net/http"
 
+	"github.com/iLeoon/realtime-gateway/internal/ctx"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
-	"github.com/iLeoon/realtime-gateway/internal/ctx"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Service interface {
@@ -39,7 +39,7 @@ func (h *Handler) GenerateTicket(w http.ResponseWriter, r *http.Request) {
 
 	jwtToken, err := h.service.GenerateWsToken(authenticatedId)
 	if err != nil {
-		logger.Error("error on generating the websocket ticket", "error", err)
+		log.Error.Println("error on generating the websocket ticket", "error", err)
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToGenerateToken("GeneratingWsJwtTokenFailed"))
 		return
 	}

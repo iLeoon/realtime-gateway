@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/iLeoon/realtime-gateway/internal/ctx"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
-	"github.com/iLeoon/realtime-gateway/internal/ctx"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Service interface {
@@ -57,7 +57,7 @@ func (h *Handler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Error("error while trying to fetch user", "error", err)
+	log.Error.Println("error while trying to fetch user", "error", err)
 	apiresponse.Send(w, http.StatusOK, user)
 	return
 }

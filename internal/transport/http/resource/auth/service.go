@@ -9,7 +9,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/idtoken"
@@ -78,7 +78,7 @@ func (s *service) HandleToken(p *idtoken.Payload, ctx context.Context) (*User, *
 
 	user, err := s.repo.CreateOrUpdateUser(ctx, provider)
 	if err != nil {
-		logger.Error("can't retrieve or create user", "error", err)
+		log.Error.Println("can't retrieve or create user", "error", err)
 		apiErr, statusCode = apierror.ErrorMapper(err, "auth")
 		return nil, apiErr, statusCode
 	}

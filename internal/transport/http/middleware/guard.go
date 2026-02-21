@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/iLeoon/realtime-gateway/internal/ctx"
 	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
-	"github.com/iLeoon/realtime-gateway/internal/ctx"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 func AuthGuard(next http.Handler, s Service) http.Handler {
@@ -33,7 +33,7 @@ func AuthGuard(next http.Handler, s Service) http.Handler {
 
 		userId, err := s.DecodeToken(jwtToken)
 		if err != nil {
-			logger.Error("unexpected error while decoding token", "error", err)
+			log.Error.Println("unexpected error while decoding token", "error", err)
 			switch {
 			case errors.Is(err, errors.Client):
 				apiresponse.Send(w, http.StatusUnauthorized, apierror.InvalidToken())

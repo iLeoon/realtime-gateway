@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/iLeoon/realtime-gateway/internal/config"
@@ -12,13 +13,9 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/user"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/websocket"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-type Handler interface {
-	Handle()
-}
 
 func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	rootMux := http.NewServeMux()
@@ -28,10 +25,10 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	validation.Init(validator)
 
 	// Wraping the api mux with ValidateHeader.
-	middleware.ValidateHeaders(rootMux)
+	handler := middleware.ValidateHeaders(rootMux)
 
 	// Wraping the api mux with CORS.
-	middleware.Cors(rootMux, conf)
+	handler = middleware.Cors(handler, conf)
 
 	jwtService := token.NewService(conf)
 
@@ -65,9 +62,10 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
 
-	logger.Info("The http server is up and running..")
-	err := http.ListenAndServe(":"+conf.HttpPort, rootMux)
+	log.Info.Println("The http server is up and running..")
+	err := http.ListenAndServe(conf.HttpPort, handler)
 	if err != nil {
-		logger.Error("coudln't connect to the http server", "error", err)
+		log.Fatal("coudln't connect to the http server", "error", err)
+		os.Exit(1)
 	}
 }

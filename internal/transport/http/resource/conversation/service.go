@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Repository interface {
@@ -33,7 +33,7 @@ func (s *service) Create(ctx context.Context, creatorId string, cr ConversationR
 
 	conversation, err := s.repo.CreateConversation(ctx, creatorId, cr)
 	if err != nil {
-		logger.Error("create conversation failed", "error", err)
+		log.Error.Println("create conversation failed", "error", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversation")
 		return nil, apiErr, statusCode
 	}
@@ -46,7 +46,7 @@ func (s *service) Find(ctx context.Context, conversationId string, userId string
 
 	conversation, err := s.repo.FindConversation(ctx, conversationId, userId)
 	if err != nil {
-		logger.Error("find conversation failed", "error", err)
+		log.Error.Println("find conversation failed", "error", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversation")
 		return nil, apiErr, statusCode
 	}
@@ -59,7 +59,7 @@ func (s *service) FindAll(ctx context.Context, userId string) (ConversationsList
 
 	conversations, err := s.repo.FindConversations(ctx, userId)
 	if err != nil {
-		logger.Error("find list of conversations failed", "error", err)
+		log.Error.Println("find list of conversations failed", "error", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversations")
 		return conversations, apiErr, statusCode
 	}
@@ -72,7 +72,7 @@ func (s *service) GetMembers(ctx context.Context, conversationId string, userId 
 
 	pl, err := s.repo.FindMembers(ctx, conversationId, userId)
 	if err != nil {
-		logger.Error("find list of conversation members failed", "error", err)
+		log.Error.Println("find list of conversation members failed", "error", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "participants")
 		return pl, apiErr, statusCode
 	}

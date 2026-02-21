@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 // Send writes a JSON response with safety buffering.
@@ -14,7 +14,7 @@ import (
 func Send(w http.ResponseWriter, status int, data interface{}) {
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(data); err != nil {
-		logger.Error("Failed to encode response", "Error", err)
+		log.Error.Println("Failed to encode response", "Error", err)
 		apiErr := apierror.Build(apierror.InternalServerErrorCode,
 			"unexpected error occured while trying to process response",
 			apierror.WithTarget("response"),
@@ -27,6 +27,6 @@ func Send(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if _, err := w.Write(buf.Bytes()); err != nil {
-		logger.Error("Faild to write the the response", "Error", err)
+		log.Error.Println("Faild to write the the response", "Error", err)
 	}
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 func ValidateHeaders(next http.Handler) http.Handler {
@@ -20,7 +20,7 @@ func ValidateHeaders(next http.Handler) http.Handler {
 				strings.Contains(lowerCase, "text/javascript")
 
 			if !valid {
-				logger.Info("Request contains invalid accept header format", "Header", acceptHeader)
+				log.Error.Println("Request contains invalid accept header format", "Header", acceptHeader)
 				apiErr := apierror.Build(apierror.StatusNotAcceptedCode, "Using invalid accept header format")
 				apiresponse.Send(w, http.StatusNotAcceptable, apiErr)
 				return

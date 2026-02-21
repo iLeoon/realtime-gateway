@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -28,8 +28,8 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s "+
 			"password=%s dbname=%s sslmode=disable",
 			host, port, user, password, dbname)
-
 	}
+
 	parseConfig, parseErr := pgxpool.ParseConfig(psqlInfo)
 	if parseErr != nil {
 		return nil, parseErr
@@ -53,10 +53,10 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
-	logger.Info("Database pool connection is ready.")
+	log.Info.Println("Database connection is ready..")
 
 	s := pool.Stat()
 
-	logger.Info("Pool health", "total", s.MaxConns(), "idle", s.IdleConns(), "acquired", s.AcquireCount())
+	log.Info.Println("Pool health", "total", s.MaxConns(), "idle", s.IdleConns(), "acquired", s.AcquireCount())
 	return pool, nil
 }

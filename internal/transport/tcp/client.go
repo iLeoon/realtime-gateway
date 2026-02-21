@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
-	"github.com/iLeoon/realtime-gateway/pkg/logger"
 	"github.com/iLeoon/realtime-gateway/internal/protocol"
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
@@ -71,7 +71,7 @@ func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (sessio
 
 	}
 
-	logger.Info("The tcp client successfully established a connection between websocket gateway and tcp server")
+	log.Info.Println("The tcp client successfully established a connection between websocket gateway and tcp server")
 
 	client := &tcpClient{
 		conn:         conn,
@@ -138,7 +138,7 @@ func (t *tcpClient) ReadFromServer() {
 	defer func() {
 		t.signal.Signal(t.userID, t.connectionID)
 		t.conn.Close()
-		logger.Info("Gateway closed connection to tcp server")
+		log.Info.Println("Gateway closed connection to tcp server")
 	}()
 
 	for {
@@ -147,14 +147,14 @@ func (t *tcpClient) ReadFromServer() {
 		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				logger.Info("TCP connection is closed by peer(server)")
+				log.Info.Println("TCP connection is closed by peer(server)")
 				return
 			}
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
 
-			logger.Error("Unexpected tcp read error", "error", err)
+			log.Error.Println("Unexpected tcp read error", "error", err)
 			return
 		}
 
@@ -166,7 +166,7 @@ func (t *tcpClient) ReadFromServer() {
 			t.router.Route(pkt, t.userID)
 		}
 
-		logger.Debug("Decode packet", "packet", frame.Payload.String())
+		log.Info.Println("Decode packet", "packet", frame.Payload.String())
 	}
 }
 
