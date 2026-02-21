@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/realtime-gateway/internal/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 )
 
 // DisconnectPacket indicates that the client intends to terminate the
@@ -31,15 +31,16 @@ func (d *DisconnectPacket) Encode() ([]byte, error) {
 }
 
 func (d *DisconnectPacket) Decode(b []byte) error {
+	const path errors.PathName = "packets/disconnect"
+	const op errors.Op = "DisconnectPacket.Decode"
 
 	if len(b) != 4 {
-		return fmt.Errorf("%w", errors.ErrPktSize)
+		return errors.B(path, op, errors.Internal, "invalid packet field size")
 	}
 	d.ConnectionID = binary.BigEndian.Uint32(b)
 
 	if d.ConnectionID == 0 {
-		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
-
+		return errors.B(path, op, errors.Internal, "invalid packet field size")
 	}
 
 	return nil

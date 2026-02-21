@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/iLeoon/realtime-gateway/internal/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 )
 
 // ConnectPacket represents a connection request sent by a client when it
@@ -34,13 +34,14 @@ func (c *ConnectPacket) Encode() ([]byte, error) {
 
 // Decode parses the payload and fills the struct.
 func (c *ConnectPacket) Decode(b []byte) error {
+	const path errors.PathName = "packets/connect"
+	const op errors.Op = "ConnectPacket.Decode"
 	if len(b) != 4 {
-		return fmt.Errorf("%w", errors.ErrPktSize)
+		return errors.B(path, op, errors.Internal, "invalid packet field size")
 	}
 	c.ConnectionID = binary.BigEndian.Uint32(b)
 	if c.ConnectionID == 0 {
-		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
-
+		return errors.B(path, op, errors.Internal, "invalid packet field size")
 	}
 	return nil
 }

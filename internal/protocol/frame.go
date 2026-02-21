@@ -2,18 +2,17 @@ package protocol
 
 import (
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"net"
 
-	prtErr "github.com/iLeoon/realtime-gateway/internal/protocol/errors"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 )
 
 const (
-	protocolMagic byte   = 0x89 // Protocol identifier.
-	MaxPayloadLen uint32 = 1024 // Verify payload length.
+	path          errors.PathName = "protocol/frame"
+	protocolMagic byte            = 0x89 // Protocol identifier.
+	MaxPayloadLen uint32          = 1024 // Verify payload length.
 )
 
 // Frame represents a binary protocol message exchanged between
@@ -67,6 +66,7 @@ func ConstructFrame(p packets.BuildPayload) *Frame {
 // the remainder of the slice. The fully encoded frame is then written to
 // the underlying connection.
 func (f *Frame) EncodeFrame(w io.Writer) error {
+	const op errors.Op = "frame.EncodeFrame"
 	// Get the actual payload slice which is a slice of bytes.
 	payloadSlice, err := f.Payload.Encode()
 	if err != nil {
@@ -77,7 +77,7 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 
 	// Validate the max payload length before encoding.
 	if sizeOfPayload > int(MaxPayloadLen) {
-		return fmt.Errorf("Size of payload: %w", prtErr.ErrMaxPayload)
+		return errors.B(path, op, errors.Internal, "the payload hit the maximum size")
 	}
 
 	// A slice to hold the bytes of the exact size we need.
@@ -111,35 +111,36 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 // After parsing the header and payload, DecodeFrame returns a fully
 // populated Frame struct containing both the header and the payload.
 func DecodeFrame(r io.Reader) (*Frame, error) {
+	const op errors.Op = "frame.DecodeFrame"
 	// We know the header length is 6 bytes.
 	header := make([]byte, 6)
 
 	//Read frame header
-	n, headerErr := io.ReadFull(r, header)
+	n, err := io.ReadFull(r, header)
 
 	// Check if the connection is dead (Remote EOF).
-	if headerErr == io.EOF || headerErr == io.ErrUnexpectedEOF {
-		return nil, io.EOF
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return nil, errors.B(path, op, errors.Internal, io.EOF)
 	}
 
 	// Check if we killed it locally (ErrClosed).
-	if errors.Is(headerErr, net.ErrClosed) {
-		return nil, net.ErrClosed
+	if errors.Is(err, net.ErrClosed) {
+		return nil, errors.B(path, op, errors.Internal, net.ErrClosed)
 	}
 
 	//Check for any error while reading frame header.
-	if headerErr != nil {
-		return nil, fmt.Errorf("%w:%v", prtErr.ErrReadHeader, headerErr)
+	if err != nil {
+		return nil, errors.B(path, op, errors.Internal, "error on attempting to read header from connection")
 	}
 
 	//Validate header size
 	if n != 6 {
-		return nil, fmt.Errorf("Unmatch: %w", prtErr.ErrHeaderSize)
+		return nil, errors.B(path, op, errors.Internal, "invalid header length")
 	}
 
 	// Validate the magic value from the incoming packet.
 	if header[0] != protocolMagic {
-		return nil, fmt.Errorf("%w: magic value is %v", prtErr.ErrUnknownMagic, header[0])
+		return nil, errors.B(path, op, errors.Internal, "unknown magic value")
 	}
 
 	// Assign the frame fields.
@@ -149,16 +150,16 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Validate the payload length before decoding
 	if int(payloadLength) > int(MaxPayloadLen) {
-		return nil, fmt.Errorf("Payload size: %w", prtErr.ErrMaxPayload)
+		return nil, errors.B(path, op, errors.Internal, "the payload hit the maximum size")
 	}
 
 	// Create a slice to read into the incmoing payload bytes into.
 	payload := make([]byte, payloadLength)
 
 	// Build up the frame payload based on the opcode(packet type)
-	pkt, packetErr := packets.ConstructPacket(opcode)
-	if packetErr != nil {
-		return nil, packetErr
+	pkt, err := packets.ConstructPacket(opcode)
+	if err != nil {
+		return nil, errors.B(err)
 	}
 
 	//Read incoming bytes into the payload slice
@@ -166,19 +167,19 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Check for any error while reading frame payload
 	if payloadErr != nil {
-		return nil, fmt.Errorf("%w:%v", prtErr.ErrReadPayload, payloadErr)
+		return nil, errors.B(path, op, errors.Internal, "error on attempting to read payload from connection")
 	}
 
 	//Check if the length in the frame header matches
 	//The length of the actual payload
 	if n != int(payloadLength) {
-		return nil, fmt.Errorf("Unmatch: %w", prtErr.ErrPayloadSize)
+		return nil, errors.B(path, op, errors.Internal, "header len doesn't match payload length")
 	}
 
 	// Decode the packet payload
-	err := pkt.Decode(payload)
-	if err != nil {
-		return nil, err
+	e := pkt.Decode(payload)
+	if e != nil {
+		return nil, e
 	}
 
 	// Return the frame

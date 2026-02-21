@@ -1,7 +1,5 @@
 package config
 
-// a file that defines the configuration variables
-
 type Config struct {
 	TCP
 	HttpServer

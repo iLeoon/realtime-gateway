@@ -1,10 +1,9 @@
-package session
-
 // Session defines the high-level connection behavior between the WebSocket
 // gateway and the TCP engine. It acts as an abstraction over the underlying
 // transporter (a TCP client) and exposes the lifecycle and message-flow
 // operations required to bridge the two systems.
-//
+package session
+
 // A Session is responsible for:
 //   - Managing connection lifecycle events (OnConnect, Disconnect)
 //   - Reading messages coming from the WebSocket gateway

@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/iLeoon/realtime-gateway/internal/protocol/errors"
+
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 )
 
 // SendMessagePacket carries an outbound message from a client to another
@@ -23,11 +24,13 @@ func (s *SendMessagePacket) Type() uint8 {
 }
 
 func (s *SendMessagePacket) Encode() ([]byte, error) {
+	const path errors.PathName = "packets/send_message"
+	const op errors.Op = "SendMessagePacket.Encode"
 
 	var body bytes.Buffer
 
 	if err := binary.Write(&body, binary.BigEndian, s.ConnectionID); err != nil {
-		return nil, err
+		return nil, errors.B(path, op, errors.Internal, err)
 	}
 
 	//Converte content into bytes because tcpserver only accepts raw bytes
@@ -39,23 +42,27 @@ func (s *SendMessagePacket) Encode() ([]byte, error) {
 }
 
 func (s *SendMessagePacket) Decode(b []byte) error {
+	const path errors.PathName = "packets/send_message"
+	const op errors.Op = "SendMessagePacket.Decode"
 	if len(b[:4]) != 4 {
-		return fmt.Errorf("%w", errors.ErrPktSize)
+		return errors.B(path, op, "connectionID field is not 4 bytes")
 	}
 	s.ConnectionID = binary.BigEndian.Uint32(b[:4])
 	if s.ConnectionID == 0 {
-		return fmt.Errorf("The connectionID cannot be 0: %w", errors.ErrPktSize)
+		return errors.B(path, op, "connectionID field is empty or 0")
+
 	}
 
 	if len(b[4:]) > 512 {
-		return fmt.Errorf("Message size(%v) hit the maximum size: %w", len(b[4:]), errors.ErrPktSize)
+		return errors.B(path, op, fmt.Errorf("message size(%v) hit the maximum size", len(b[4:])))
 	}
 	payloadContent := string(b[4:])
 
 	s.Content = payloadContent
 
 	if len(s.Content) == 0 {
-		return fmt.Errorf("The Message cannot be of size 0: %w", errors.ErrPktSize)
+		return errors.B(path, op, "message field is empty")
+
 	}
 	return nil
 
