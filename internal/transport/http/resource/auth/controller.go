@@ -61,7 +61,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    verifier,
 		Path:     "/",
 		MaxAge:   0,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	http.SetCookie(w, &http.Cookie{
@@ -70,7 +70,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    stateString,
 		Path:     "/",
 		MaxAge:   0,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	http.Redirect(w, r, url, http.StatusFound)
