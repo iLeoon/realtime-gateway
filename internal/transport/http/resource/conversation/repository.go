@@ -77,9 +77,9 @@ func (r *repository) CreateConversation(ctx context.Context, creatorId string, c
 	// Create a conversation with it's creator.
 	err = tx.QueryRow(ctx,
 		`
-		INSERT INTO conversations (creator_id, conversation_type, last_message_id) VALUES($1, $2, $3)
-		RETURNING conversation_id, creator_id, conversation_type, last_message_id`,
-		creatorId, cr.ConversationType, cr.LastMessageId).Scan(&c.ConversationId, &c.CreatorID, &c.ConversationType, &c.LastMessageId)
+		INSERT INTO conversations (creator_id, conversation_type) VALUES($1, $2, $3)
+		RETURNING conversation_id, creator_id, conversation_type`,
+		creatorId, cr.ConversationType).Scan(&c.ConversationId, &c.CreatorID, &c.ConversationType)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 	}
@@ -106,7 +106,6 @@ func (r *repository) FindConversation(ctx context.Context, conversationId string
 		c.conversation_id,
 		c.creator_id,
 		c.conversation_type,
-		c.last_message_id,
 		c.created_at
         FROM conversations c
         WHERE c.conversation_id = $1
@@ -120,7 +119,6 @@ func (r *repository) FindConversation(ctx context.Context, conversationId string
 		&c.ConversationId,
 		&c.CreatorID,
 		&c.ConversationType,
-		&c.LastMessageId,
 		&c.CreatedAt,
 	)
 	if err != nil {
@@ -145,7 +143,6 @@ func (r *repository) FindConversations(ctx context.Context, userId string) (Conv
 	    c.conversation_id, 
 	    c.creator_id, 
 	    c.conversation_type, 
-	    c.last_message_id, 
 	    c.created_at,
 	    (
 		SELECT json_agg(
@@ -196,7 +193,6 @@ func (r *repository) FindConversations(ctx context.Context, userId string) (Conv
 			&c.ConversationId,
 			&c.CreatorID,
 			&c.ConversationType,
-			&c.LastMessageId,
 			&c.CreatedAt,
 			&participantsRaw,
 		)

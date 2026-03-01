@@ -5,7 +5,6 @@ import "time"
 type ConversationRequest struct {
 	RecipientId      int    `json:"recipientID,string" validate:"required,gt=0"`
 	ConversationType string `json:"conversationType" validate:"required,oneof=private-chat group-chat"`
-	LastMessageId    *int   `json:"lastMessageId,string" validate:"omitempty,gt=0"`
 }
 
 type Participant struct {
@@ -20,7 +19,6 @@ type Conversation struct {
 	ConversationId   string        `json:"id"`
 	CreatorID        string        `json:"creatorId"`
 	ConversationType string        `json:"conversationType"`
-	LastMessageId    *int          `json:"lastMessageId"`
 	CreatedAt        time.Time     `json:"createdDate"`
 	Participants     []Participant `json:"participants"`
 }

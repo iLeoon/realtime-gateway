@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS conversations (
 	conversation_id INT GENERATED ALWAYS AS IDENTITY,
 	creator_id INT NOT NULL,
 	conversation_type conversation_type NOT NULL,
-	last_message_id INT NULL,
 	created_at TIMESTAMP DEFAULT NOW(),
 
 	PRIMARY KEY (conversation_id),
