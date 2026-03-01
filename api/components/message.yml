@@ -1,0 +1,46 @@
+Message:
+  type: object
+  description: Represents a single message in a conversation
+  required:
+    - id
+    - creatorId
+    - conversationId
+    - content
+    - createdAt
+  properties:
+    id:
+      type: string
+      description: Message's unique identifier
+      example: "101"
+
+    creatorId:
+      type: string
+      description: ID of the user who sent the message
+      example: "22"
+
+    conversationId:
+      type: string
+      description: ID of the conversation this message belongs to
+      example: "5"
+
+    content:
+      type: string
+      description: Text content of the message
+      example: "Hey, how are you?"
+
+    createdAt:
+      type: string
+      format: date-time
+      description: Timestamp when the message was created
+      example: "2026-03-01T13:00:00Z"
+
+MessagesList:
+  type: object
+  description: A collection of messages
+  required:
+    - value
+  properties:
+    value:
+      type: array
+      items:
+        $ref: "#/Message"

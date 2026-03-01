@@ -1,0 +1,159 @@
+get:
+  summary: OAuth Callback
+  description: >
+    Handles the OAuth2 authorization code callback from Google.
+    Validates the state cookie (CSRF), exchanges the code for tokens via PKCE,
+    validates the ID token, then creates or updates the internal user.
+    On success returns 201 with the internal JWT in the Authorization header and body.
+  operationId: oauthCallback
+  tags: [Auth]
+  security: []
+  parameters:
+    - name: code
+      in: query
+      description: Authorization code issued by Google
+      required: true
+      schema:
+        type: string
+    - name: state
+      in: query
+      description: CSRF state value that must match the state cookie
+      required: true
+      schema:
+        type: string
+    - name: error
+      in: query
+      description: OAuth error code returned by Google if authorization failed
+      required: false
+      schema:
+        type: string
+    - name: error_description
+      in: query
+      description: Human-readable description of the OAuth error
+      required: false
+      schema:
+        type: string
+  responses:
+    "201":
+      description: Authentication successful — internal JWT issued
+      headers:
+        Authorization:
+          description: Bearer JWT for subsequent authenticated requests
+          schema:
+            type: string
+            example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token]
+            properties:
+              token:
+                type: string
+                example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    "400":
+      description: Invalid or missing OAuth parameters, cookies, or identity token
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            missingOAuthParams:
+              summary: code or state query param is missing
+              value:
+                error:
+                  code: BadRequest
+                  message: missing required parameters
+                  target: OAuthParameters
+            missingCookies:
+              summary: pkce_verifier or state cookie is missing
+              value:
+                error:
+                  code: BadRequest
+                  message: missing required parameters
+                  target: OAuthCookies
+            invalidIdToken:
+              summary: Google ID token failed validation
+              value:
+                error:
+                  code: BadRequest
+                  message: the identity token is invalid
+                  target: idtoken
+                  innererror:
+                    code: InvalidOrExpiredIdentityToken
+            tokenExchangeFailed:
+              summary: Authorization code exchange with Google failed
+              value:
+                error:
+                  code: BadRequest
+                  message: unexpected error occured
+                  target: token
+                  innererror:
+                    code: ExchangeTokenFaild
+
+    "403":
+      description: State cookie mismatch — possible CSRF attempt
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ForbiddenRequest
+              message: using invalid parameters
+              target: state
+
+    "500":
+      description: Internal server error during authentication
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            missingOpenId:
+              summary: openid scope not returned by Google
+              value:
+                error:
+                  code: InternalServerError
+                  message: authentication has failed
+                  target: idtoken
+                  innererror:
+                    code: MissingOpenIdInTheConfigScopes
+            tokenGenerationFailed:
+              summary: Failed to generate internal JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to generate token
+                  target: token
+                  innererror:
+                    code: GeneratingHttpJwtTokenFailed
+
+    "502":
+      description: Google OAuth server returned a server_error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: an issue occurred while trying to authenticate
+              target: oauth
+              innererror:
+                code: IssueWithOAuthFlow
+
+    "503":
+      description: Google OAuth server is temporarily unavailable
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ServiceUnavailable
+              message: an issue occurred while trying to authenticate
+              target: oauth
+              innererror:
+                code: IssueWithOAuthFlow

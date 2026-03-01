@@ -1,30 +1,45 @@
 get:
-  summary: Get WebSocket access token
+  summary: List Conversation Participants
   description: >
-    This operation issues a short-lived WebSocket access token (ticket)
-    for the authenticated user.
-    The caller must be authenticated.
-    The returned token is intended to be used once during the WebSocket
-    connection handshake and is scoped to real-time communication only.
-  operationId: getWebSocketToken
-  tags: [WebSocket]
+    Fetches all participants of a conversation including the creator (role=owner)
+    and all members (role=member).
+    The caller must be a member of the conversation — returns 404 if not.
+  operationId: getConversationParticipants
+  tags: [Conversations]
+  parameters:
+    - name: id
+      in: path
+      description: The conversation ID to fetch participants for
+      required: true
+      example: 5
+      schema:
+        type: integer
   security:
     - JWTAuth: []
   responses:
     "200":
-      description: WebSocket token issued successfully
+      description: Participants retrieved successfully
       content:
         application/json:
           schema:
-            $ref: ../components/websocket.yml#/WsTicket
+            $ref: ../components/conversation.yml#/ParticipantsList
 
     "400":
-      description: Missing or malformed Authorization header
+      description: Invalid conversation ID format, or missing/malformed Authorization header
       content:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
           examples:
+            invalidId:
+              summary: Non-integer conversation ID in path
+              value:
+                error:
+                  code: BadRequest
+                  message: invalid conversation id
+                  target: conversation
+                  innererror:
+                    code: InvalidConversationIdFormatUsedInThePath
             missingAuthHeader:
               summary: Authorization header missing
               value:
@@ -58,8 +73,22 @@ get:
               innererror:
                 code: InvalidOrExpiredToken
 
+    "404":
+      description: Conversation not found or caller has no access
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: NotFoundRequest
+              message: no data was found
+              target: participants
+              innererror:
+                code: NoRecordsFoundWithThatId
+
     "500":
-      description: Internal server error — JWT decode failure, missing auth context, or ticket generation failure
+      description: Internal server error — JWT decode failure, missing auth context, or DB failure
       content:
         application/json:
           schema:
@@ -83,15 +112,6 @@ get:
                   target: userId
                   innererror:
                     code: MissingUserIdContext
-            tokenGenerationFailed:
-              summary: Failed to generate WebSocket JWT ticket
-              value:
-                error:
-                  code: InternalServerError
-                  message: unexpected error while trying to generate token
-                  target: token
-                  innererror:
-                    code: GeneratingWsJwtTokenFailed
 
     "406":
       description: Invalid Accept header — must be application/json or */*
@@ -103,4 +123,34 @@ get:
             error:
               code: StatusNotAccepted
               message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: participants
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: participants
+              innererror:
+                code: TimeOutHasBeenExceeded
 

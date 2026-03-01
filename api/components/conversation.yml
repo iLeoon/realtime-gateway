@@ -1,0 +1,111 @@
+Participant:
+  type: object
+  description: Represents a member of a conversation
+  required:
+    - id
+    - displayName
+    - email
+    - joinedDate
+    - role
+  properties:
+    id:
+      type: string
+      description: User's unique identifier
+      example: "22"
+
+    displayName:
+      type: string
+      description: User's display name
+      example: ahmed.eihab
+
+    email:
+      type: string
+      format: email
+      description: User's email address
+      example: ahmed@gmail.com
+
+    joinedDate:
+      type: string
+      format: date-time
+      description: Timestamp when the user joined the conversation
+      example: "2026-01-15T10:00:00Z"
+
+    role:
+      type: string
+      description: User's role in the conversation
+      example: admin
+
+ParticipantsList:
+  type: object
+  required:
+    - value
+  properties:
+    value:
+      type: array
+      items:
+        $ref: "#/Participant"
+
+Conversation:
+  type: object
+  description: Represents a conversation between two or more users
+  required:
+    - id
+    - creatorId
+    - conversationType
+    - createdDate
+    - participants
+  properties:
+    id:
+      type: string
+      description: Conversation's unique identifier
+      example: "5"
+
+    creatorId:
+      type: string
+      description: ID of the user who created the conversation
+      example: "22"
+
+    conversationType:
+      type: string
+      description: Type of conversation
+      enum: [private-chat, group-chat]
+      example: private-chat
+
+    createdDate:
+      type: string
+      format: date-time
+      description: Timestamp when the conversation was created
+      example: "2026-01-15T10:00:00Z"
+
+    participants:
+      type: array
+      description: List of members in the conversation
+      items:
+        $ref: "#/Participant"
+
+ConversationsList:
+  type: object
+  required:
+    - value
+  properties:
+    value:
+      type: array
+      items:
+        $ref: "#/Conversation"
+
+ConversationRequest:
+  type: object
+  required:
+    - recipientID
+    - conversationType
+  properties:
+    recipientID:
+      type: string
+      description: ID of the user to start a conversation with
+      example: "33"
+
+    conversationType:
+      type: string
+      description: Type of conversation to create
+      enum: [private-chat, group-chat]
+      example: private-chat

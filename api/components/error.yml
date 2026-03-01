@@ -1,48 +1,80 @@
 Error:
   type: object
+  description: >
+    Error response following Microsoft REST API Guidelines.
+    See https://github.com/microsoft/api-guidelines/blob/vNext/Guidelines.md#7102-error-condition-responses
   required: [error]
   properties:
     error:
-      type: object
-      required: [code, message]
-      properties:
-        code:
-          type: string
-          description: Stable, service-defined error code
-          example: Unauthorized
+      $ref: "#/ErrorBody"
 
-        message:
-          type: string
-          description: Human-readable developer message
-          example: Authentication is required
+ErrorBody:
+  type: object
+  required: [code, message]
+  properties:
+    code:
+      type: string
+      description: >
+        Stable, machine-readable error code. One of:
+        BadRequest, ForbiddenRequest, UnauthorizedRequest, NotFoundRequest,
+        InternalServerError, BadArgumet, BadGateway, Timeout, ServiceUnavailable, StatusNotAccepted.
+      example: BadRequest
 
-        target:
-          type: string
-          description: The request element that caused the error
-          example: authorization
+    message:
+      type: string
+      description: Human-readable description of the error.
+      example: invalid request JSON format
 
-        innererror:
-          $ref: "#/InnerError"
+    target:
+      type: string
+      description: The request element that caused the error.
+      example: RequestBody
+
+    details:
+      type: array
+      description: >
+        Present on validation errors (code = BadArgumet).
+        Each entry describes one invalid field.
+      items:
+        $ref: "#/ErrorDetails"
+
+    innererror:
+      $ref: "#/InnerError"
+
+ErrorDetails:
+  type: object
+  description: Details about a single invalid field. Used with validation errors.
+  required: [code, target, message]
+  properties:
+    code:
+      type: string
+      example: required
+    target:
+      type: string
+      description: The field that failed validation.
+      example: conversationType
+    message:
+      type: string
+      example: conversationType is a required field
 
 InnerError:
   type: object
+  description: More specific diagnostic code, intended for developers.
   required: [code]
   properties:
     code:
       type: string
-      description: More specific error code
-      example: MissingUserIdContext
+      description: Specific error code narrowing down the cause.
+      example: InvalidConversationIdFormatUsedInThePath
 
     innererror:
       $ref: "#/InnerErrorDetails"
 
 InnerErrorDetails:
   type: object
+  description: Deepest level of diagnostic detail, typically a database or runtime cause.
+  required: [code]
   properties:
     code:
       type: string
-      example: UserIdMissing
-    minLength:
-      type: string
-    maxLength:
-      type: string
+      example: DatabaseFailure

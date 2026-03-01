@@ -1,13 +1,14 @@
 get:
   summary: Get User
   description: >
-    This operation fetches the user by their id.
-    It validates the parameter and the caller must be authenticated and is only allowed to access their own user resource.
+    Fetches the user by their ID.
+    The caller must be authenticated and may only access their own user resource.
   operationId: getUserById
+  tags: [Users]
   parameters:
     - name: id
       in: path
-      description: The user id used to fetch the specified user
+      description: The user ID to fetch
       required: true
       example: 22
       schema:
@@ -23,18 +24,67 @@ get:
             $ref: ../components/user.yml#/User
 
     "400":
-      description: BadRequest - invalid Id
+      description: Invalid user ID format, or missing/malformed Authorization header
       content:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
+          examples:
+            invalidId:
+              summary: Non-integer user ID in path
+              value:
+                error:
+                  code: BadRequest
+                  message: invalid user id
+                  target: userId
+                  innererror:
+                    code: InvalidUserIdFormatUsedInThePath
+            missingAuthHeader:
+              summary: Authorization header missing
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: MissingAuthHeader
+            invalidAuthFormat:
+              summary: Authorization header not in Bearer format
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: InvalidHeaderFormat
+
+    "401":
+      description: JWT is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: UnauthorizedRequest
+              message: invalid token is being used
+              target: token
+              innererror:
+                code: InvalidOrExpiredToken
 
     "403":
-      description: Forbidden - user is not allowed to access this resource
+      description: Caller is trying to access another user's resource
       content:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ForbiddenRequest
+              message: user is not authorized to check the resource
+              target: user
+              innererror:
+                code: AuthenticatedIdIsUnauthroized
 
     "404":
       description: User not found
@@ -42,10 +92,105 @@ get:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: NotFoundRequest
+              message: no data was found
+              target: user
+              innererror:
+                code: NoRecordsFoundWithThatId
 
     "500":
-      description: Internal server error
+      description: Internal server error — JWT decode failure, missing auth context, or unexpected DB failure
       content:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
+          examples:
+            tokenDecodeFailed:
+              summary: Unexpected error decoding the JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to decode token
+                  target: token
+                  innererror:
+                    code: UnexpectedInternalError
+            missingContext:
+              summary: Auth middleware did not inject user ID
+              value:
+                error:
+                  code: InternalServerError
+                  message: user id is missing in the request header
+                  target: userId
+                  innererror:
+                    code: MissingUserIdContext
+            dbFailure:
+              summary: Unexpected database error
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error on processing the request
+                  target: user
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: WrongSyntax
+
+    "406":
+      description: Invalid Accept header — must be application/json or */*
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: StatusNotAccepted
+              message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: user
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "503":
+      description: Database connection pool exhausted or server overloaded
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ServiceUnavailable
+              message: unexpected error on processing the request
+              target: user
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: ServiceIsUnavilableDueToManyRequests
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: user
+              innererror:
+                code: TimeOutHasBeenExceeded
+

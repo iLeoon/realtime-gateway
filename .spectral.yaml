@@ -1,0 +1,9 @@
+extends: ["spectral:oas"]
+rules:
+  # Disabled due to a known Spectral bug: OAS 3.1 uses JSON Schema Draft 2020-12
+  # which introduces `unevaluatedProperties`. Spectral's validator incorrectly
+  # flags valid `$ref` usages (path items, operations) as having unevaluated
+  # properties because it doesn't fully resolve references before applying
+  # unevaluatedProperties constraints.
+  # Tracking issue: https://github.com/stoplightio/spectral/issues/2081
+  oas3-schema: off

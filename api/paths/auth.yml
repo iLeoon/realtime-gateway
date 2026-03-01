@@ -1,22 +1,23 @@
-post:
-  summary: Authenticate User
+get:
+  summary: Initiate OAuth Login
   description: >
-    This operation authenticates the user using an external identity provider.
-    The identity is verified and mapped to an internal user.
-    If the user does not exist, a new user is created. If the user already exists, their record is updated as needed.
-    Returns the internal user identifier.
+    Redirects the caller to Google's OAuth2 authorization endpoint.
+    Sets two HttpOnly cookies: pkce_verifier (PKCE code verifier) and state (CSRF token).
+    These cookies are required for the subsequent callback request.
   operationId: authenticateUser
+  tags: [Auth]
   security: []
   responses:
-    "303":
-      description: Redirect to external identity provider
+    "302":
+      description: Redirect to Google OAuth2 authorization endpoint
       headers:
         Location:
-          description: Redirect target URL
+          description: Google OAuth2 authorization URL
           schema:
             type: string
         Set-Cookie:
           description: >
-            Two cookies are set by the server (pkce-verifier and state) to protect the authentication flow.
+            Two cookies are set: pkce_verifier and state.
+            Both are HttpOnly and protect the authentication flow.
           schema:
             type: string

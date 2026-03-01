@@ -1,0 +1,10 @@
+WsTicket:
+  type: object
+  description: A short-lived WebSocket authentication ticket
+  required:
+    - ticket
+  properties:
+    ticket:
+      type: string
+      description: A short-lived JWT used to authenticate the WebSocket connection.
+      example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV

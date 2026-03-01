@@ -1,0 +1,311 @@
+get:
+  summary: List Conversations
+  description: >
+    Fetches all conversations the authenticated user is a member of,
+    either as creator or participant.
+  operationId: listConversations
+  tags: [Conversations]
+  security:
+    - JWTAuth: []
+  responses:
+    "200":
+      description: Conversations retrieved successfully
+      content:
+        application/json:
+          schema:
+            $ref: ../components/conversation.yml#/ConversationsList
+
+    "400":
+      description: Missing or malformed Authorization header
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            missingAuthHeader:
+              summary: Authorization header missing
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: MissingAuthHeader
+            invalidAuthFormat:
+              summary: Header does not start with "Bearer "
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: InvalidHeaderFormat
+
+    "401":
+      description: JWT is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: UnauthorizedRequest
+              message: invalid token is being used
+              target: token
+              innererror:
+                code: InvalidOrExpiredToken
+
+    "500":
+      description: Internal server error — JWT decode failure, missing auth context, or DB failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            tokenDecodeFailed:
+              summary: Unexpected error decoding the JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to decode token
+                  target: token
+                  innererror:
+                    code: UnexpectedInternalError
+            missingContext:
+              summary: Auth middleware did not inject user ID
+              value:
+                error:
+                  code: InternalServerError
+                  message: user id is missing in the request header
+                  target: userId
+                  innererror:
+                    code: MissingUserIdContext
+            dbFailure:
+              summary: Unexpected database error
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error on processing the request
+                  target: conversations
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: WrongSyntax
+
+    "406":
+      description: Invalid Accept header — must be application/json or */*
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: StatusNotAccepted
+              message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: conversations
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "503":
+      description: Database connection pool exhausted or server overloaded
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ServiceUnavailable
+              message: unexpected error on processing the request
+              target: conversations
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: ServiceIsUnavilableDueToManyRequests
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: conversations
+              innererror:
+                code: TimeOutHasBeenExceeded
+
+post:
+  summary: Create Conversation
+  description: >
+    Creates a new conversation. The authenticated user becomes the creator.
+    Supported types are private-chat and group-chat.
+    Creating a duplicate private-chat between the same two users returns 400.
+    On success returns 201 with a Location header.
+  operationId: createConversation
+  tags: [Conversations]
+  security:
+    - JWTAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../components/conversation.yml#/ConversationRequest
+  responses:
+    "201":
+      description: Conversation created successfully
+      headers:
+        Location:
+          description: URL of the newly created conversation
+          schema:
+            type: string
+            example: http://localhost:7000/api/v1.0/conversations/5
+      content:
+        application/json:
+          schema:
+            $ref: ../components/conversation.yml#/Conversation
+
+    "400":
+      description: Invalid request body, validation failure, duplicate private-chat, or malformed auth header
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            invalidJSON:
+              summary: Malformed JSON body
+              value:
+                error:
+                  code: BadRequest
+                  message: invalid request JSON format
+                  target: RequestBody
+                  innererror:
+                    code: InvalidFieldDataTypeOrInvalidJSONFormat
+            validationError:
+              summary: Missing or invalid fields
+              value:
+                error:
+                  code: BadArgumet
+                  message: invalid argument
+                  target: ConversationRequest
+                  details:
+                    - code: required
+                      target: conversationType
+                      message: conversationType is a required field
+            duplicateConversation:
+              summary: A private-chat between these two users already exists
+              value:
+                error:
+                  code: BadRequest
+                  message: unexpected error on processing the request
+                  target: conversation
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: UserIsPassingInvalidData
+            missingAuthHeader:
+              summary: Authorization header missing
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: MissingAuthHeader
+
+    "401":
+      description: JWT is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: UnauthorizedRequest
+              message: invalid token is being used
+              target: token
+              innererror:
+                code: InvalidOrExpiredToken
+
+    "500":
+      description: Internal server error — JWT decode failure, missing auth context, or DB failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            tokenDecodeFailed:
+              summary: Unexpected error decoding the JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to decode token
+                  target: token
+                  innererror:
+                    code: UnexpectedInternalError
+            missingContext:
+              summary: Auth middleware did not inject user ID
+              value:
+                error:
+                  code: InternalServerError
+                  message: user id is missing in the request header
+                  target: userId
+                  innererror:
+                    code: MissingUserIdContext
+
+    "406":
+      description: Invalid Accept header — must be application/json or */*
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: StatusNotAccepted
+              message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: conversation
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: conversation
+              innererror:
+                code: TimeOutHasBeenExceeded
+
