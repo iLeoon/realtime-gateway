@@ -1,6 +1,6 @@
 {
-  "name": "Test User",
+  "displayName": "Test User",
   "email": "test@example.com",
   "provider": "google",
-  "provider_id": "123456789"
+  "id": "123456789"
 }
