@@ -27,5 +27,7 @@ type ClientPayload struct {
 // chat message. It is extracted from the ClientPayload's raw JSON payload
 // when the opcode indicates a send-message operation.
 type SendMessagePayload struct {
-	Content string `json:"content"`
+	Content         string `json:"content"`
+	ConversationID  string `json:"conversationID"`
+	RecipientUserID string `json:"recipientUserID"`
 }

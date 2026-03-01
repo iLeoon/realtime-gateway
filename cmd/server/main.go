@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// Run the TCP server.
-	go tcp.NewServer(conf, tcpServerReady)
+	go tcp.Start(conf, db, tcpServerReady)
 
 	<-tcpServerReady
 

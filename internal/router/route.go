@@ -1,6 +1,8 @@
 package router
 
 import (
+	"fmt"
+
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
@@ -32,6 +34,8 @@ func (r *router) Route(pkt packets.BuildPayload, userID string) {
 	switch p := pkt.(type) {
 	case *packets.ResponseMessagePacket:
 		r.handleResponseMessage(p, userID)
+	case *packets.ErrorPacket:
+		r.handleErrorMessage(p, userID)
 	}
 }
 
@@ -40,6 +44,7 @@ func (r *router) Route(pkt packets.BuildPayload, userID string) {
 func (r *router) handleResponseMessage(pkt *packets.ResponseMessagePacket, userID string) {
 	recipient := pkt.ToConnectionID
 	message := []byte(pkt.ResContent)
+	fmt.Println(recipient)
 
 	err := r.router.Send(userID, recipient, message)
 	if err != nil {
@@ -47,4 +52,11 @@ func (r *router) handleResponseMessage(pkt *packets.ResponseMessagePacket, userI
 		return
 	}
 
+}
+
+func (r *router) handleErrorMessage(pkt *packets.ErrorPacket, userID string) {
+	message := []byte(pkt.Message)
+	if err := r.router.Send(userID, pkt.ConnectionID, message); err != nil {
+		log.Error.Println("failed to deliver error to client", err)
+	}
 }

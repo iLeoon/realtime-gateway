@@ -2,13 +2,14 @@ package tcp
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/protocol"
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
@@ -94,6 +95,8 @@ func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (sessio
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
 func (t *tcpClient) WriteToServer(data []byte) error {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "tcpClient.WriteToServer"
 	var pkt packets.BuildPayload
 	cp := &ClientPayload{}
 
@@ -112,9 +115,19 @@ func (t *tcpClient) WriteToServer(data []byte) error {
 		if err != nil {
 			return err
 		}
+		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert conversationID to int: %v", err))
+		}
+		recipientIDToInt, err := strconv.ParseUint(data.RecipientUserID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, fmt.Errorf("failed to convert recipientUserID to int: %v", err))
+		}
+
 		pkt = &packets.SendMessagePacket{
-			ConnectionID: t.connectionID,
-			Content:      data.Content,
+			ConversationID:  uint32(convIDToInt),
+			RecipientUserID: uint32(recipientIDToInt),
+			Content:         data.Content,
 		}
 	default:
 		return fmt.Errorf("Invalid packet type %s", cp.Opcode)
@@ -154,18 +167,18 @@ func (t *tcpClient) ReadFromServer() {
 				return
 			}
 
-			log.Error.Println("Unexpected tcp read error", "error", err)
+			log.Error.Println("unexpected tcp read error", err)
 			return
 		}
 
 		switch pkt := frame.Payload.(type) {
 		case *packets.PingPacket:
 			t.pongRes()
-		default:
-			// Push it to the router.
+		case *packets.ErrorPacket:
+			t.router.Route(pkt, t.userID)
+		case *packets.ResponseMessagePacket:
 			t.router.Route(pkt, t.userID)
 		}
-
 		log.Info.Println("Decode packet", "packet", frame.Payload.String())
 	}
 }
@@ -177,42 +190,67 @@ func (t *tcpClient) ReadFromServer() {
 // to the TCP server so the engine can register and track the new
 // client session.
 func (t *tcpClient) OnConnect() error {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "tcpClient.onConnect"
+
+	// userID originates as a string from the JWT claims but is represented
+	// as uint32 internally to avoid repeated string conversions.
+	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
+	if err != nil {
+		return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert userID to int: %v", err))
+
+	}
 	pkt := &packets.ConnectPacket{
 		ConnectionID: t.connectionID,
+		UserID:       uint32(userIDToInt),
 	}
 	if err := t.connectionHygiene(pkt); err != nil {
-		return err
+		return errors.B(path, op, err)
 	}
 	return nil
 }
 
 // DisConnect is basically the inverse of OnConnect.
 func (t *tcpClient) OnDisConnect() error {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "tcpClient.onDisconnect"
+
+	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
+	if err != nil {
+		return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert userID to int: %v", err))
+	}
 	pkt := &packets.DisconnectPacket{
 		ConnectionID: t.connectionID,
+		UserID:       uint32(userIDToInt),
 	}
 	if err := t.connectionHygiene(pkt); err != nil {
-		return err
+		return errors.B(path, op, err)
 	}
+	return nil
+}
 
+func (t *tcpClient) pongRes() error {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "tcpClient.pongRes"
+	pkt := &packets.PongPacket{}
+	if err := t.connectionHygiene(pkt); err != nil {
+		return errors.B(path, op, err)
+	}
 	return nil
 }
 
 func (t *tcpClient) connectionHygiene(pkt packets.BuildPayload) error {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "t.connectionHygiene"
 	if err := t.conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
-		return fmt.Errorf("connection is unhealty: %w", err)
+		return errors.B(path, op, errors.Internal, fmt.Errorf("connection is unhealty: %w", err))
 	}
 
 	// Construct the frame, encode it, and then send it to the TCP server.
 	frame := protocol.ConstructFrame(pkt)
 	err := frame.EncodeFrame(t.conn)
 	if err != nil {
-		return err
+		return errors.B(path, op, err)
 	}
 	return nil
-}
-
-func (t *tcpClient) pongRes() {
-	pkt := &packets.PongPacket{}
-	t.connectionHygiene(pkt)
 }
