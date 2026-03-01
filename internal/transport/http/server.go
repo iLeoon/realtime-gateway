@@ -9,6 +9,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/middleware"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/auth"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/conversation"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/message"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/token"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/user"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/websocket"
@@ -40,9 +41,12 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	userServ := user.NewService(userRepo)
 	userHandler := user.NewHandler(userServ)
 
+	msgRepo := message.NewRepo(db)
+	msgServ := message.NewService(msgRepo)
+
 	convRepo := conversation.NewRepo(db)
 	convServ := conversation.NewService(convRepo)
-	convHandler := conversation.NewHandler(convServ)
+	convHandler := conversation.NewHandler(convServ, msgServ)
 
 	wsHandler := websocket.NewHandler(jwtService)
 
@@ -56,10 +60,11 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	rootMux.Handle("/auth/", authMux)
 	rootMux.Handle("/users/", middleware.AuthGuard(userMux, jwtService))
+
 	rootMux.Handle("/conversations/", middleware.AuthGuard(convMux, jwtService))
 	rootMux.Handle("/conversations", middleware.AuthGuard(convMux, jwtService))
-	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 
+	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
 
 	log.Info.Println("The http server is up and running..")

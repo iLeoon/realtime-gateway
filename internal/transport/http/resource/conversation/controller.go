@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/iLeoon/realtime-gateway/internal/ctx"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/models"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
-	"github.com/iLeoon/realtime-gateway/internal/ctx"
 )
 
 type Service interface {
@@ -20,13 +21,20 @@ type Service interface {
 	GetMembers(ctx context.Context, conversationId string, userId string) (pl ParticipantsList, a *apierror.APIError, statusCode int)
 }
 
-type Handler struct {
-	service Service
+// Use message service
+type MessageService interface {
+	FindAll(ctx context.Context, conversationID string, userID string) (ml models.MessagesList, a *apierror.APIError, statusCode int)
 }
 
-func NewHandler(s Service) *Handler {
+type Handler struct {
+	service        Service
+	messageService MessageService
+}
+
+func NewHandler(s Service, ms MessageService) *Handler {
 	return &Handler{
-		service: s,
+		service:        s,
+		messageService: ms,
 	}
 }
 
@@ -37,6 +45,8 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 	convMux.HandleFunc("GET /conversations/{id}", h.GetConversation)
 	convMux.HandleFunc("POST /conversations", h.Create)
 	convMux.HandleFunc("GET /conversations/{id}/participants", h.GetMembers)
+
+	convMux.HandleFunc("GET /conversations/{id}/messages", h.ListMessages)
 
 	return convMux
 }
@@ -145,4 +155,32 @@ func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
 		participants.Value = []Participant{}
 	}
 	apiresponse.Send(w, http.StatusOK, participants)
+}
+
+func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
+	authenticatedID, ok := ctx.UserId(r.Context())
+	if !ok {
+		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
+		return
+	}
+
+	conversationID := r.PathValue("id")
+	if _, err := strconv.Atoi(conversationID); err != nil {
+		apiErr := apierror.Build(apierror.BadRequestCode, "invalid conversation id",
+			apierror.WithTarget("conversation"),
+			apierror.WithInnerError("InvalidConversationIdFormatUsedInThePath"))
+		apiresponse.Send(w, http.StatusBadRequest, apiErr)
+		return
+	}
+
+	ml, apiErr, statusCode := h.messageService.FindAll(r.Context(), conversationID, authenticatedID)
+	if apiErr != nil {
+		apiresponse.Send(w, statusCode, apiErr)
+		return
+	}
+
+	if ml.Value == nil {
+		ml.Value = []models.Message{}
+	}
+	apiresponse.Send(w, http.StatusOK, ml)
 }
