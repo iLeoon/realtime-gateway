@@ -35,8 +35,8 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		return nil, parseErr
 	}
 
-	parseConfig.MaxConns = 20
-	parseConfig.MinConns = 5
+	parseConfig.MaxConns = 50
+	parseConfig.MinConns = 10
 	parseConfig.MaxConnIdleTime = time.Hour * 1
 	parseConfig.MaxConnLifetime = time.Hour
 	parseConfig.HealthCheckPeriod = 1 * time.Minute
