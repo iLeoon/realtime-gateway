@@ -63,7 +63,7 @@ func (c *client) readPump() {
 			}
 
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Error.Println("Unexpected error shutting down websocket server", "Error", err)
+				log.Error.Println("unexpected error shutting down websocket server", err)
 			}
 			return
 		}
@@ -77,9 +77,8 @@ func (c *client) readPump() {
 		c.server.reclaimConnLocked(c)
 
 		// Forward the messages to WriteToServer with the proper data.
-		readErr := c.tcpClient.WriteToServer(message)
-		if readErr != nil {
-			log.Error.Println("Error on trying to read message from browser", "Error", readErr)
+		if err := c.tcpClient.WriteToServer(message); err != nil {
+			log.Error.Println("faild to send message to the tcp server", err)
 			return
 		}
 		// Mark the connection inactive after reading.
@@ -106,11 +105,14 @@ func (c *client) writePump() {
 
 			msg, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				log.Error.Println("An error while tring to write the message", "Error", err)
+				log.Error.Println("faild to write the message", err)
+				return
 			}
+
 			msg.Write(message)
+
 			if err := msg.Close(); err != nil {
-				log.Error.Println("Failed to close writer", "Error", err)
+				log.Error.Println("failed to close writer", err)
 				return
 			}
 
@@ -168,6 +170,6 @@ func (c *client) Terminate() {
 	})
 }
 
-func (c *client) FetchConnectionID() uint32 {
+func (c *client) ConnectionID() uint32 {
 	return c.connectionID
 }

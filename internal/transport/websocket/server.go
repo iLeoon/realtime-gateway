@@ -18,7 +18,7 @@ import (
 type Client interface {
 	Enqueue(message []byte)
 	Terminate()
-	FetchConnectionID() uint32
+	ConnectionID() uint32
 }
 
 type signalToWsReq struct {
@@ -78,7 +78,6 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			fmt.Println(s.c.FrontEndOrigin)
 			return s.c.FrontEndOrigin == r.Header.Get("Origin")
 		},
 	}
@@ -132,7 +131,7 @@ func (s *server) Send(userID string, connectionID uint32, message []byte) error 
 	}
 
 	for i := range clients {
-		if clients[i].FetchConnectionID() == connectionID {
+		if clients[i].ConnectionID() == connectionID {
 			clients[i].Enqueue(message)
 			return nil
 		}
@@ -193,7 +192,7 @@ func (s *server) run() {
 				}
 
 				for i := range clients {
-					if clients[i].FetchConnectionID() == signal.connectionID {
+					if clients[i].ConnectionID() == signal.connectionID {
 						clients[i].Terminate()
 						break
 					}
@@ -206,7 +205,7 @@ func (s *server) run() {
 func (s *server) removeConnections(clients []Client, target uint32) []Client {
 	filtered := clients[:0]
 	for i := range clients {
-		if clients[i].FetchConnectionID() != target {
+		if clients[i].ConnectionID() != target {
 			filtered = append(filtered, clients[i])
 		}
 	}
