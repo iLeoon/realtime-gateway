@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 
@@ -75,6 +76,10 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 	// Compute length.
 	sizeOfPayload := len(payloadSlice)
 
+	if sizeOfPayload == 0 && f.Header.Opcode != packets.PING && f.Header.Opcode != packets.PONG {
+		return errors.B(path, op, errors.Internal, "trying to encode an empty payload")
+	}
+
 	// Validate the max payload length before encoding.
 	if sizeOfPayload > int(MaxPayloadLen) {
 		return errors.B(path, op, errors.Internal, "the payload hit the maximum size")
@@ -116,7 +121,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 	header := make([]byte, 6)
 
 	//Read frame header
-	n, err := io.ReadFull(r, header)
+	_, err := io.ReadFull(r, header)
 
 	// Check if the connection is dead (Remote EOF).
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -130,12 +135,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Check for any error while reading frame header.
 	if err != nil {
-		return nil, errors.B(path, op, errors.Internal, "error on attempting to read header from connection")
-	}
-
-	//Validate header size
-	if n != 6 {
-		return nil, errors.B(path, op, errors.Internal, "invalid header length")
+		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame header from connection: %v", err))
 	}
 
 	// Validate the magic value from the incoming packet.
@@ -153,27 +153,29 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 		return nil, errors.B(path, op, errors.Internal, "the payload hit the maximum size")
 	}
 
-	// Create a slice to read into the incmoing payload bytes into.
-	payload := make([]byte, payloadLength)
+	if payloadLength == 0 && opcode != packets.PING && opcode != packets.PONG {
+		return nil, errors.B(path, op, errors.Internal, "trying to decode an empty payload")
+	}
+
+	if (opcode == packets.PING || opcode == packets.PONG) && payloadLength > 0 {
+		return nil, errors.B(path, op, errors.Client, "health packets size can't be > 0")
+	}
 
 	// Build up the frame payload based on the opcode(packet type)
 	pkt, err := packets.ConstructPacket(opcode)
 	if err != nil {
-		return nil, errors.B(err)
+		return nil, errors.B(path, op, err, errors.Client)
 	}
 
+	// Create a slice to read into the incmoing payload bytes into.
+	payload := make([]byte, payloadLength)
+
 	//Read incoming bytes into the payload slice
-	n, payloadErr := io.ReadFull(r, payload)
+	_, payloadErr := io.ReadFull(r, payload)
 
 	//Check for any error while reading frame payload
 	if payloadErr != nil {
-		return nil, errors.B(path, op, errors.Internal, "error on attempting to read payload from connection")
-	}
-
-	//Check if the length in the frame header matches
-	//The length of the actual payload
-	if n != int(payloadLength) {
-		return nil, errors.B(path, op, errors.Internal, "header len doesn't match payload length")
+		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame payload from connection: %v", payloadErr))
 	}
 
 	// Decode the packet payload
