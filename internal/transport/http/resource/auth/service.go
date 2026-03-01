@@ -39,7 +39,7 @@ func NewService(c *config.Config, authRepo Repository) *service {
 			Scopes:       []string{"openid", "email", "profile"},
 			Endpoint:     google.Endpoint,
 		},
-		timeout: time.Second * 2,
+		timeout: time.Second * 5,
 	}
 }
 
