@@ -11,10 +11,11 @@ import (
 // initially joins the system.
 type ConnectPacket struct {
 	ConnectionID uint32 // ConnectionID is a unique identifier for the connecting client.
+	UserID       uint32 // UserID is the authenticated user who owns this connection.
 }
 
 func (c *ConnectPacket) String() string {
-	return fmt.Sprintf("ConnectPacket{ConnectionID: %d}", c.ConnectionID)
+	return fmt.Sprintf("ConnectPacket{ConnectionID: %d, UserID: %d}", c.ConnectionID, c.UserID)
 }
 
 // Type returns the opcode.
@@ -23,25 +24,33 @@ func (c *ConnectPacket) Type() uint8 {
 }
 
 // Encode serializes the packet fields into a payload.
+// Layout: [4 bytes ConnectionID][4 bytes UserID]
 func (c *ConnectPacket) Encode() ([]byte, error) {
-	payloadSlice := make([]byte, 4)
+	const path errors.PathName = "packets/connect"
+	const op errors.Op = "ConnectPacket.Encode"
+	b := make([]byte, 8)
 
-	binary.BigEndian.PutUint32(payloadSlice, c.ConnectionID)
+	binary.BigEndian.PutUint32(b[:4], c.ConnectionID)
+	binary.BigEndian.PutUint32(b[4:8], c.UserID)
 
-	return payloadSlice, nil
-
+	return b, nil
 }
 
 // Decode parses the payload and fills the struct.
 func (c *ConnectPacket) Decode(b []byte) error {
 	const path errors.PathName = "packets/connect"
 	const op errors.Op = "ConnectPacket.Decode"
-	if len(b) != 4 {
-		return errors.B(path, op, errors.Internal, "invalid packet field size")
+	if len(b) != 8 {
+		return errors.B(path, op, errors.Internal, "invalid packet fields size")
 	}
-	c.ConnectionID = binary.BigEndian.Uint32(b)
+	c.ConnectionID = binary.BigEndian.Uint32(b[:4])
 	if c.ConnectionID == 0 {
-		return errors.B(path, op, errors.Internal, "invalid packet field size")
+		return errors.B(path, op, errors.Internal, "connectionID field is empty or 0")
 	}
+	c.UserID = binary.BigEndian.Uint32(b[4:8])
+	if c.UserID == 0 {
+		return errors.B(path, op, errors.Internal, "userID field is empty or 0")
+	}
+
 	return nil
 }
