@@ -47,7 +47,7 @@ func (h *Handler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if authenticatedId != targetId {
-		apiresponse.Send(w, http.StatusUnauthorized, apierror.UnAuthorizedUser("user"))
+		apiresponse.Send(w, http.StatusForbidden, apierror.UnAuthorizedUser("user"))
 		return
 	}
 
