@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
@@ -31,12 +33,14 @@ type TokenService interface {
 type Handler struct {
 	service Service
 	token   TokenService
+	config  *config.Config
 }
 
-func NewHandler(s Service, t TokenService) *Handler {
+func NewHandler(s Service, t TokenService, c *config.Config) *Handler {
 	return &Handler{
 		service: s,
 		token:   t,
+		config:  c,
 	}
 }
 
@@ -78,6 +82,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
 
 	if err := r.URL.Query().Get("error"); err != "" {
 		errorDes := r.URL.Query().Get("error_description")
@@ -119,7 +125,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.service.GoogleClient().Exchange(r.Context(), code, oauth2.VerifierOption(verifier.Value))
+	token, err := h.service.GoogleClient().Exchange(ctx, code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
 		statusCode, apiErr, err := h.service.BackChannelError(err)
 		log.Error.Println("unexpected error occurred", "error", err)
@@ -137,7 +143,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := idtoken.Validate(r.Context(), rawIdToken, h.service.GoogleClient().ClientID)
+	payload, err := idtoken.Validate(ctx, rawIdToken, h.service.GoogleClient().ClientID)
 	if err != nil {
 		log.Error.Println("identity tokne is either valid or expired", err, "idtoken", payload)
 
@@ -160,13 +166,16 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Authorization", "Bearer "+jwtToken)
-	w.WriteHeader(http.StatusCreated)
-
-	// For testing purposes
-	json.NewEncoder(w).Encode(map[string]string{
-		"token": jwtToken,
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    jwtToken,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   3600,
 	})
+	http.Redirect(w, r, h.config.FrontEndOrigin+"/chat", http.StatusFound)
+
 }
 
 func (h *Handler) TestDBLoad(w http.ResponseWriter, r *http.Request) {
@@ -191,5 +200,4 @@ func (h *Handler) TestDBLoad(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	json.NewEncoder(w).Encode(map[string]string{"userId": user.UserID, "email": user.Email, "name": user.UserName})
-	fmt.Println(user)
 }

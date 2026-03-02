@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/iLeoon/realtime-gateway/internal/config"
@@ -25,17 +26,23 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	validator := validator.New(validator.WithRequiredStructEnabled())
 	validation.Init(validator)
 
+	// Init Rate limiter
+	rl := middleware.NewRateLimiter()
+
 	// Wraping the api mux with ValidateHeader.
 	handler := middleware.ValidateHeaders(rootMux)
 
 	// Wraping the api mux with CORS.
 	handler = middleware.Cors(handler, conf)
 
+	// Wraping the api mux with Rate limiter
+	handler = middleware.RateLimiter(handler, rl)
+
 	jwtService := token.NewService(conf)
 
 	authRepo := auth.NewRepo(db)
 	authService := auth.NewService(conf, authRepo)
-	authHandler := auth.NewHandler(authService, jwtService)
+	authHandler := auth.NewHandler(authService, jwtService, conf)
 
 	userRepo := user.NewRepo(db)
 	userServ := user.NewService(userRepo)
@@ -67,8 +74,20 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
 
-	log.Info.Println("The http server is up and running..")
-	err := http.ListenAndServe(conf.HttpPort, handler)
+	// Custom http server configurations
+	server := &http.Server{
+		Addr:              conf.HttpPort,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       60 * time.Second,
+		ErrorLog:          log.NewStdLogger(log.Info),
+		Handler:           handler,
+	}
+
+	log.Info.Println("http server is up and running...")
+
+	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal("coudln't connect to the http server", "error", err)
 		os.Exit(1)

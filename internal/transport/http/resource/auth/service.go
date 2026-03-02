@@ -117,30 +117,17 @@ func (s *service) FrontChannelError(oauthCode string) (int, *apierror.APIError) 
 	case "temporarily_unavailable":
 		code = apierror.ServiceUnavailable
 		statusCode = http.StatusServiceUnavailable
-	case "invalid_request":
-		code = apierror.BadRequestCode
-		statusCode = http.StatusBadRequest
-	case "unauthorized_client":
-		code = apierror.BadRequestCode
-		statusCode = http.StatusBadRequest
 	case "access_denied":
 		code = apierror.ForbiddenRequestCode
 		statusCode = http.StatusForbidden
-	case "invalid_scope":
-		code = apierror.BadRequestCode
-		statusCode = http.StatusBadRequest
-	case "unsupported_response_type":
-		code = apierror.BadRequestCode
-		statusCode = http.StatusBadRequest
 	default:
-		code = apierror.InternalServerErrorCode
+		code = apierror.BadRequestCode
 		statusCode = http.StatusBadRequest
 	}
 	return statusCode, apierror.Build(code,
 		"an issue occurred while trying to authenticate",
 		apierror.WithTarget("oauth"),
 		apierror.WithInnerError("IssueWithOAuthFlow"))
-
 }
 
 // BackChannelError follows the RPC pattern for error handling.
@@ -148,22 +135,32 @@ func (s *service) FrontChannelError(oauthCode string) (int, *apierror.APIError) 
 // to ensure the caller has the full context of the server-to-server operation.
 func (s *service) BackChannelError(err error) (int, *apierror.APIError, error) {
 	const op errors.Op = "service.BackChannelError"
-	var statusCode int
-	apiErr := apierror.Build(apierror.BadRequestCode, "unexpected error occured",
-		apierror.WithTarget("token"),
-		apierror.WithInnerError("ExchangeTokenFaild"),
-	)
 
-	if rErr, ok := err.(*oauth2.RetrieveError); ok {
-		statusCode = http.StatusBadRequest
-		return statusCode, apiErr, errors.B(path, op, errors.Client, fmt.Errorf("error_code:%s, error_description:%s", rErr.ErrorCode, rErr.ErrorDescription))
-	} else {
-		statusCode = http.StatusInternalServerError
-		return statusCode, apiErr, errors.B(path, op, errors.Internal, err)
+	switch {
+	// Check if the user was hanging for a long time or canceled the request altogether.
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+		apiErr := apierror.Build(apierror.GatewayTimeout, "unexpected error occured",
+			apierror.WithTarget("token"),
+			apierror.WithInnerError("ExchangeTokenFaild"),
+		)
+		return http.StatusGatewayTimeout, apiErr, errors.B(path, op, errors.TimeOut, "waited for exchange for too long")
+	default:
+		if rErr, ok := err.(*oauth2.RetrieveError); ok {
+			apiErr := apierror.Build(apierror.BadRequestCode, "unexpected error occured",
+				apierror.WithTarget("token"),
+				apierror.WithInnerError("ExchangeTokenFaild"),
+			)
+			return http.StatusBadRequest, apiErr, errors.B(path, op, errors.Client, fmt.Errorf("error_code:%s, error_description:%s", rErr.ErrorCode, rErr.ErrorDescription))
+		}
+		apiErr := apierror.Build(apierror.InternalServerErrorCode, "unexpected error occured",
+			apierror.WithTarget("token"),
+			apierror.WithInnerError("ExchangeTokenFaild"),
+		)
+		return http.StatusInternalServerError, apiErr, errors.B(path, op, errors.Internal, err)
 	}
 }
-func (s *service) TestLoadService(rCtx context.Context, testUser ProviderIdentity) (*User, error) {
 
+func (s *service) TestLoadService(rCtx context.Context, testUser ProviderIdentity) (*User, error) {
 	ctx, cancel := context.WithTimeout(rCtx, 10*time.Second)
 	defer cancel()
 	user, err := s.repo.CreateOrUpdateUser(ctx, testUser)

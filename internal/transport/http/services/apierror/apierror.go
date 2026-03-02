@@ -21,6 +21,7 @@ const (
 	BadGatewayCode          Code = "BadGateway"
 	GatewayTimeout          Code = "Timeout"
 	ServiceUnavailable      Code = "ServiceUnavailable"
+	RateLimitCode           Code = "RateLimit"
 )
 
 // APIError follows the Microsoft REST API Guidelines for error condition responses.

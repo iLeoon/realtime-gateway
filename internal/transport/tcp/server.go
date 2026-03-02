@@ -164,25 +164,52 @@ func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uin
 	}
 
 	s.mu.Lock()
-	connIDs, ok := s.clients[pkt.RecipientUserID]
-	connections := make([]connInfo, 0, len(connIDs))
+	recipientConnIDs, ok := s.clients[pkt.RecipientUserID]
 	if !ok {
 		s.mu.Unlock()
-		s.writePacket(&packets.ErrorPacket{Code: errors.NotFound, Message: "the connection entrey doesn't exist"}, conn)
-		return errors.B(path, op, "couldn't find the connectionID within the map", errors.Internal)
+		s.writePacket(&packets.ErrorPacket{Code: errors.NotFound, Message: "the recipient connection entrey doesn't exist"}, conn)
+		return errors.B(path, op, "couldn't find the recipient connectionID within the map", errors.Internal)
 	}
 
-	// Fan-Out to all the user's connections
-	for _, connID := range connIDs {
+	senderConnIDs, ok := s.clients[userID]
+	if !ok {
+		s.mu.Unlock()
+		s.writePacket(&packets.ErrorPacket{Code: errors.NotFound, Message: "the sender connection entrey doesn't exist"}, conn)
+		return errors.B(path, op, "couldn't find the sender connectionID within the map", errors.Internal)
+	}
+
+	senderConnections := make([]connInfo, 0, len(senderConnIDs))
+	recipientConnections := make([]connInfo, 0, len(recipientConnIDs))
+	// Fan-Out to all the recipient connections
+	for _, connID := range recipientConnIDs {
 		if rawConn, ok := s.connections[connID]; ok {
-			connections = append(connections, connInfo{connectionID: connID, rawConnection: rawConn})
+			recipientConnections = append(recipientConnections, connInfo{connectionID: connID, rawConnection: rawConn})
+		}
+	}
+	// Fan-Out to all the sender connections
+	for _, connID := range senderConnIDs {
+		if rawConn, ok := s.connections[connID]; ok {
+			senderConnections = append(senderConnections, connInfo{connectionID: connID, rawConnection: rawConn})
 		}
 	}
 	s.mu.Unlock()
 
-	for _, v := range connections {
+	for _, v := range recipientConnections {
 		resPkt := &packets.ResponseMessagePacket{
 			ToConnectionID: v.connectionID,
+			AuthorID:       userID,
+			ConversationID: pkt.ConversationID,
+			ResContent:     pkt.Content,
+		}
+		if err := s.writePacket(resPkt, v.rawConnection); err != nil {
+			log.Error.Printf("operation %s: failed to write to this connection: %d: due to %v", op, v.connectionID, err)
+		}
+	}
+	for _, v := range senderConnections {
+		resPkt := &packets.ResponseMessagePacket{
+			ToConnectionID: v.connectionID,
+			AuthorID:       userID,
+			ConversationID: pkt.ConversationID,
 			ResContent:     pkt.Content,
 		}
 		if err := s.writePacket(resPkt, v.rawConnection); err != nil {
