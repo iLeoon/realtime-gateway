@@ -55,7 +55,7 @@ func New(c *config.Config) *server {
 		idleList:   list.New(),
 		c:          c,
 	}
-	s.setMaxIdleTime(30 * time.Second)
+	s.setMaxIdleTime(10 * time.Minute)
 	go s.run()
 	return s
 }
@@ -358,8 +358,4 @@ func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
 		}
 	}
 	return d, closing
-}
-
-func (s *server) fetchClient(userID string, connectionID uint32) {
-
 }

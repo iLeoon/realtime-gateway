@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/iLeoon/realtime-gateway/internal/ctx"
 	"github.com/iLeoon/realtime-gateway/internal/errors"
@@ -13,21 +12,15 @@ import (
 
 func AuthGuard(next http.Handler, s Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		const prefix = "Bearer "
-		autHeader := r.Header.Get("Authorization")
-		if autHeader == "" {
-			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("header", "MissingAuthHeader"))
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthToken"))
 			return
 		}
 
-		if !strings.HasPrefix(autHeader, prefix) {
-			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("header", "InvalidHeaderFormat"))
-			return
-		}
-
-		jwtToken := strings.TrimPrefix(autHeader, prefix)
+		jwtToken := cookie.Value
 		if jwtToken == "" {
-			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("header", "MissingAuthToken"))
+			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthToken"))
 			return
 		}
 
