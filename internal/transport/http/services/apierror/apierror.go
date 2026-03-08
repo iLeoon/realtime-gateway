@@ -119,6 +119,10 @@ func ErrorMapper(err error, target string) (*APIError, int) {
 	case errors.Is(err, errors.Network):
 		apiErr = UnexpectedDatabaseFailure(BadGatewayCode, target, "NetworkFailure")
 		statusCode = http.StatusBadGateway
+	case errors.Is(err, errors.Forbidden):
+		apiErr = Build(ForbiddenRequestCode, "you do not have permission to perform this action",
+			WithTarget(target))
+		statusCode = http.StatusForbidden
 	}
 	return apiErr, statusCode
 }
@@ -137,7 +141,7 @@ func DatabaseErrorClassification(path errors.PathName, op errors.Op, err error) 
 			return errors.B(path, op, errors.ServiceUnavailable, err)
 		case "57014":
 			return errors.B(path, op, errors.TimeOut, err)
-		case "23505", "23503":
+		case "23505", "23503", "23514":
 			return errors.B(path, op, errors.Client, err)
 		default:
 			return errors.B(path, op, errors.Internal, err)
