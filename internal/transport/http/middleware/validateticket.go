@@ -25,7 +25,7 @@ func ValidateWsTicket(next http.Handler, s Service) http.Handler {
 
 		userId, err := s.DecodeToken(jwtToken)
 		if err != nil {
-			log.Error.Println("unexpected error while decoding token", "error", err)
+			log.Error.Println("unexpected error while decoding token", err)
 			switch {
 			case errors.Is(err, errors.Client):
 				apiresponse.Send(w, http.StatusUnauthorized, apierror.InvalidToken())

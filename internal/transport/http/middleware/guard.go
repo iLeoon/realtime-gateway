@@ -14,19 +14,19 @@ func AuthGuard(next http.Handler, s Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("token")
 		if err != nil {
-			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthToken"))
+			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthCookie"))
 			return
 		}
 
 		jwtToken := cookie.Value
 		if jwtToken == "" {
-			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthToken"))
+			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthCookie"))
 			return
 		}
 
 		userId, err := s.DecodeToken(jwtToken)
 		if err != nil {
-			log.Error.Println("unexpected error while decoding token", "error", err)
+			log.Error.Println("unexpected error while decoding token", err)
 			switch {
 			case errors.Is(err, errors.Client):
 				apiresponse.Send(w, http.StatusUnauthorized, apierror.InvalidToken())
