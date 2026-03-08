@@ -11,19 +11,22 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/ctx"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
 type Client interface {
 	Enqueue(message []byte)
-	Terminate()
+	Terminate(code int, reason string)
 	ConnectionID() uint32
 }
 
 type signalToWsReq struct {
 	userID       string
 	connectionID uint32
+	code         int
+	reason       string
 }
 
 // server manages all active WebSocket clients. It maintains a map of
@@ -32,7 +35,6 @@ type signalToWsReq struct {
 type server struct {
 	clients     map[string][]Client
 	c           *config.Config
-	unregister  chan unregisterRequest
 	signalToWs  chan signalToWsReq
 	mu          sync.Mutex
 	idleList    *list.List
@@ -40,22 +42,15 @@ type server struct {
 	reaperCh    chan struct{}
 }
 
-// unregisterRequest is a custom struct that catches the reason for unregistering a client.
-type unregisterRequest struct {
-	client *client
-	reason string
-}
-
 // Create new websocket server
 func New(c *config.Config) *server {
 	s := &server{
 		clients:    make(map[string][]Client),
-		unregister: make(chan unregisterRequest),
-		signalToWs: make(chan signalToWsReq),
+		signalToWs: make(chan signalToWsReq, 5),
 		idleList:   list.New(),
 		c:          c,
 	}
-	s.setMaxIdleTime(10 * time.Minute)
+	s.setMaxIdleTime(5 * time.Minute)
 	go s.run()
 	return s
 }
@@ -99,6 +94,7 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 	tcpClient, err := session.NewClient(userID, connectionID)
 	if err != nil {
 		log.Error.Println("Error on initializing a new tcp client for the connection between websocket and tcp server")
+		conn.Close()
 		return
 	}
 
@@ -113,9 +109,16 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		done:          make(chan struct{}),
 	}
 	s.mu.Lock()
-	s.registerClient(client)
-	s.putConn(client)
+	// Check if the connection was successfully registred to the map
+	registered := s.registerClient(client)
 	s.mu.Unlock()
+
+	if registered {
+		s.putConn(client)
+	} else {
+		conn.Close()
+		return
+	}
 
 	go client.readPump()
 	go client.writePump()
@@ -124,86 +127,73 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 
 func (s *server) Send(userID string, connectionID uint32, message []byte) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	clients, ok := s.clients[userID]
 	if !ok {
-		return fmt.Errorf("no client was found with that userID: %d", userID)
+		s.mu.Unlock()
+		return fmt.Errorf("no client was found with that userID: %s", userID)
 	}
-
+	var target Client
 	for i := range clients {
 		if clients[i].ConnectionID() == connectionID {
-			clients[i].Enqueue(message)
-			return nil
+			target = clients[i]
+			break
 		}
 	}
-	return fmt.Errorf("no clients were found with that connectionID: %d", connectionID)
+
+	s.mu.Unlock()
+	if target == nil {
+		return fmt.Errorf("no clients were found with that connectionID: %d", connectionID)
+	}
+	target.Enqueue(message)
+	return nil
 }
 
-func (s *server) registerClient(c *client) {
+func (s *server) registerClient(c *client) bool {
 	//Add the connectionID to the websocket map
 	s.clients[c.userID] = append(s.clients[c.userID], c)
 
 	//Add the connectionID to the tcp server map
 	err := c.tcpClient.OnConnect()
 	if err != nil {
-		log.Error.Println("Couldn't register this client", "ClientID", "Error", c.connectionID, err)
-		delete(s.clients, c.userID)
+		log.Error.Printf("couldn't register this client: %d due to :%v", c.connectionID, err)
+		clients := s.removeConnections(s.clients[c.userID], c.connectionID)
+		if len(clients) == 0 {
+			delete(s.clients, c.userID)
+		} else {
+			s.clients[c.userID] = clients
+		}
+		return false
 	}
+	return true
 }
 
-// Unregister unregisters a connection to the clients map
-// and signal to the ws when an error occures to disconnect the user.
+// run handles signals from the TCP layer to terminate specific connections.
 func (s *server) run() {
 	for {
 		select {
-		case req := <-s.unregister:
-			s.mu.Lock()
-			if clients, ok := s.clients[req.client.userID]; ok {
-				log.Info.Println("Terminating the connection", "ID", req.client.connectionID, "Reason", req.reason)
-
-				//Remove the connectionID from the websocket map
-				clients = s.removeConnections(clients, req.client.connectionID)
-				if len(clients) == 0 {
-					delete(s.clients, req.client.userID)
-				} else {
-					s.clients[req.client.userID] = clients
-				}
-
-				//Remove the connectionID from the tcp server map
-				err := req.client.tcpClient.OnDisConnect()
-				if err != nil {
-					log.Error.Println("Couldn't unregister this client", "ClientID", req.client.connectionID, "Error", err)
-				}
-
-				// permanently close the connection.
-				req.client.Terminate()
-			}
-			s.mu.Unlock()
-
 		case signal := <-s.signalToWs:
-			if clients, ok := s.clients[signal.userID]; ok {
-				log.Info.Println("Signal received to kill connection", "ID", signal.connectionID, "UserID", signal.userID)
-
-				updatedClients := s.removeConnections(clients, signal.connectionID)
-				if len(updatedClients) == 0 {
-					delete(s.clients, signal.userID)
-				} else {
-					s.clients[signal.userID] = updatedClients
-				}
-
+			s.mu.Lock()
+			clients, ok := s.clients[signal.userID]
+			var target Client
+			if ok {
 				for i := range clients {
 					if clients[i].ConnectionID() == signal.connectionID {
-						clients[i].Terminate()
+						target = clients[i]
 						break
 					}
 				}
+			}
+			s.mu.Unlock()
+			if target != nil {
+				log.Info.Println("Signal received to kill connection", "ID", signal.connectionID, "UserID", signal.userID)
+				target.Terminate(signal.code, signal.reason)
 			}
 		}
 	}
 }
 
 func (s *server) removeConnections(clients []Client, target uint32) []Client {
-	filtered := clients[:0]
+	filtered := make([]Client, 0, len(clients))
 	for i := range clients {
 		if clients[i].ConnectionID() != target {
 			filtered = append(filtered, clients[i])
@@ -212,24 +202,34 @@ func (s *server) removeConnections(clients []Client, target uint32) []Client {
 	return filtered
 }
 
-func (s *server) Signal(userID string, connectionID uint32) {
-	s.signalToWs <- signalToWsReq{
-		userID:       userID,
-		connectionID: connectionID,
+func (s *server) removeClient(c *client) {
+	s.mu.Lock()
+	clients := s.removeConnections(s.clients[c.userID], c.connectionID)
+	if len(clients) == 0 {
+		delete(s.clients, c.userID)
+	} else {
+		s.clients[c.userID] = clients
 	}
+	s.mu.Unlock()
 }
 
-func (s *server) UnregisterRequest(c *client, reason string) {
-	s.unregister <- unregisterRequest{
-		client: c,
-		reason: reason,
+func (s *server) Signal(userID string, connectionID uint32, code int, reason string) {
+	const path errors.PathName = "websocket/server"
+	const op errors.Op = "server.Signal"
+	select {
+	case s.signalToWs <- signalToWsReq{userID: userID, connectionID: connectionID, code: code, reason: reason}:
+	default:
+		err := errors.B(path, op)
+		log.Error.Println("the channel buffer is full", err)
+		return
 	}
 }
 
 func (s *server) putConn(client *client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	client.isActive = false
 	client.lastActiveAt = time.Now()
-
 	s.putConnLocked(client)
 }
 
@@ -237,7 +237,7 @@ func (s *server) putConnLocked(client *client) {
 	// Check for duplicates.
 	if client.idleElement != nil {
 		s.idleList.Remove(client.idleElement)
-		// client.idleElement = nil
+		client.idleElement = nil
 	}
 
 	// Only add the inactive clients to the list.
@@ -252,7 +252,7 @@ func (s *server) putConnLocked(client *client) {
 
 }
 
-func (s *server) reclaimConnLocked(client *client) {
+func (s *server) reclaimConn(client *client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if client.idleElement == nil {
@@ -314,7 +314,8 @@ func (s *server) startReaper(d time.Duration) {
 
 		if clients != nil {
 			for i := range clients {
-				s.unregister <- unregisterRequest{client: clients[i], reason: "The connection has been idle for too long"}
+				clients[i].Terminate(websocket.CloseGoingAway, "idle for too long")
+				log.Info.Printf("connection %d (user %s) has been idle for too long", clients[i].ConnectionID(), clients[i].userID)
 			}
 		}
 
@@ -335,8 +336,9 @@ func (s *server) startReaper(d time.Duration) {
 
 func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
 	if s.maxIdleTime <= 0 || s.idleList.Len() == 0 {
-		s.reaperCh = nil
-		return d, nil
+		// Nothing to evict — sleep a full interval. Do NOT touch reaperCh;
+		// the goroutine is still running and owns its own lifecycle.
+		return s.maxIdleTime, nil
 	}
 
 	var closing []*client
