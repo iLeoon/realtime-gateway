@@ -24,8 +24,22 @@ func ConstructPacket(ope uint8) (BuildPayload, error) {
 		return &PingPacket{}, nil
 	case PONG:
 		return &PongPacket{}, nil
+	case UPDATE_MESSAGE:
+		return &UpdateMessagePacket{}, nil
+	case UPDATE_RESPONSE:
+		return &ResponseUpdateMessagePacket{}, nil
+	case DELETE_MESSAGE:
+		return &DeleteMessagePacket{}, nil
+	case DELETE_RESPONSE:
+		return &ResponseDeleteMessagePacket{}, nil
 	case ERROR:
 		return &ErrorPacket{}, nil
+	case TYPING:
+		return &TypingPacket{}, nil
+	case TYPING_RESPONSE:
+		return &ResponseTypingPacket{}, nil
+	case PRESENCE_RESPONSE:
+		return &ResponsePresencePacket{}, nil
 	}
 
 	return nil, errors.B(path, op, errors.Internal, "unknown packet type")
