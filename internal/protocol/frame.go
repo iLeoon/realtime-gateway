@@ -135,12 +135,12 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Check for any error while reading frame header.
 	if err != nil {
-		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame header from connection: %v", err))
+		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame header from connection: %w", err))
 	}
 
 	// Validate the magic value from the incoming packet.
 	if header[0] != protocolMagic {
-		return nil, errors.B(path, op, errors.Internal, "unknown magic value")
+		return nil, errors.B(path, op, errors.Client, "unknown magic value")
 	}
 
 	// Assign the frame fields.
@@ -150,11 +150,11 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Validate the payload length before decoding
 	if int(payloadLength) > int(MaxPayloadLen) {
-		return nil, errors.B(path, op, errors.Internal, "the payload hit the maximum size")
+		return nil, errors.B(path, op, errors.Client, "the payload hit the maximum size")
 	}
 
 	if payloadLength == 0 && opcode != packets.PING && opcode != packets.PONG {
-		return nil, errors.B(path, op, errors.Internal, "trying to decode an empty payload")
+		return nil, errors.B(path, op, errors.Client, "trying to decode an empty payload")
 	}
 
 	if (opcode == packets.PING || opcode == packets.PONG) && payloadLength > 0 {
@@ -175,7 +175,7 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 
 	//Check for any error while reading frame payload
 	if payloadErr != nil {
-		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame payload from connection: %v", payloadErr))
+		return nil, errors.B(path, op, errors.Internal, fmt.Errorf("error on trying to read frame payload from connection: %w", payloadErr))
 	}
 
 	// Decode the packet payload
