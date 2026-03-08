@@ -1,6 +1,9 @@
 package errors
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
 type Kind uint8
 type Op string
@@ -13,6 +16,7 @@ const (
 	Client
 	Network
 	ServiceUnavailable
+	Forbidden
 )
 
 func (k Kind) String() string {
@@ -29,6 +33,8 @@ func (k Kind) String() string {
 		return "connection error"
 	case ServiceUnavailable:
 		return "service is down or unavailable"
+	case Forbidden:
+		return "forbidden"
 	}
 	return "unkown error"
 }
@@ -48,6 +54,7 @@ type errorString struct {
 	s string
 }
 
+// New just acs as errors.New() to pass normal strings when needed.
 func New(str string) *errorString {
 	return &errorString{str}
 }
@@ -197,4 +204,10 @@ func Is[T any](err error, target T) bool {
 		// If T is neither Kind nor error (e.g., a string), return false
 		return false
 	}
+}
+
+// Errorf is equivalent to fmt.Errorf, but allows clients to import only this
+// package for all error handling.
+func Errorf(format string, args ...interface{}) error {
+	return &errorString{fmt.Sprintf(format, args...)}
 }
