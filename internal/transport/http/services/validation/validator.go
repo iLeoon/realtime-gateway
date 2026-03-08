@@ -64,14 +64,28 @@ func setValidationMessageOps(o *options) codeMessage {
 	case "required":
 		return codeMessage{
 			code:    "RequiredField",
-			message: fmt.Sprintf("%s is a required field: value passed %v", o.fieldName, o.fieldValue),
+			message: fmt.Sprintf("%s is a required field: can't be ommitted or empty", o.fieldName),
 		}
 	case "gt":
 		return codeMessage{
 			code:    "InvalidValuePassed",
 			message: fmt.Sprintf("%s must be greater than %v: value passed %v", o.fieldName, o.passedParameter, o.fieldValue),
 		}
-
+	case "min":
+		return codeMessage{
+			code:    "MinConstraint",
+			message: fmt.Sprintf("%s can't be less than: %v", o.fieldName, o.passedParameter),
+		}
+	case "max":
+		return codeMessage{
+			code:    "MaxConstraint",
+			message: fmt.Sprintf("%s can't be more than: %v", o.fieldName, o.passedParameter),
+		}
+	case "unique":
+		return codeMessage{
+			code:    "UniqueField",
+			message: fmt.Sprintf("%s is a unique field: can't have duplicate entries: %v", o.fieldName, o.fieldValue),
+		}
 	case "oneof":
 		return codeMessage{
 			code:    "InvalidValuePassed",
