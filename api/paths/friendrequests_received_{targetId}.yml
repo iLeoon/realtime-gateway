@@ -1,221 +1,44 @@
 patch:
-  summary: Add Participants to Group Conversation
+  summary: Accept Received Friend Request
   description: >
-    Adds one or more users to an existing group conversation.
-    Any existing member of the conversation can add participants.
-    Users already in the conversation are silently ignored (idempotent).
-    This endpoint is only valid for group-chat conversations — returns 400 for private-chat.
-  operationId: updateConversationParticipants
-  tags: [Conversations]
+    Accepts a pending friend request sent by the specified target to the authenticated user.
+    Updates the friends record status from 'pending' to 'accepted'.
+    sender_id and recipient_id are derived using MIN/MAX of the two user IDs — consistent with how
+    friend requests are stored. The caller must NOT be the author of the request.
+    Returns 404 if no pending request from the given target to the caller exists.
+    Returns 204 No Content on success.
+  operationId: acceptReceivedFriendRequest
+  tags: [FriendRequests]
   parameters:
-    - name: id
+    - name: targetId
       in: path
-      description: The group conversation ID to add participants to
+      description: ID of the user who sent the friend request
       required: true
-      example: 5
+      example: 4
       schema:
         type: integer
   security:
     - JWTAuth: []
-  requestBody:
-    required: true
-    content:
-      application/json:
-        schema:
-          $ref: ../components/conversation.yml#/UpdateConversationRequest
-        example:
-          participantIDs: [44, 55, 66]
   responses:
-    "200":
-      description: Participants added successfully — returns the full updated participants list
-      content:
-        application/json:
-          schema:
-            $ref: ../components/conversation.yml#/ParticipantsList
+    "204":
+      description: Friend request accepted successfully — no response body
 
     "400":
-      description: Invalid conversation ID format, invalid request body, or missing/malformed Authorization header
+      description: Invalid targetId format or malformed Authorization header
       content:
         application/json:
           schema:
             $ref: ../components/error.yml#/Error
           examples:
             invalidId:
-              summary: Non-integer conversation ID in path
+              summary: Non-integer targetId in path
               value:
                 error:
                   code: BadRequest
-                  message: invalid conversation id
-                  target: conversation
+                  message: invalid target user id
+                  target: targetId
                   innererror:
-                    code: InvalidConversationIdFormatUsedInThePath
-            invalidJSON:
-              summary: Malformed JSON body
-              value:
-                error:
-                  code: BadRequest
-                  message: invalid request JSON format
-                  target: RequestBody
-                  innererror:
-                    code: InvalidFieldDataTypeOrInvalidJSONFormat
-            validationError:
-              summary: Missing or invalid fields
-              value:
-                error:
-                  code: BadArgument
-                  message: invalid argument
-                  target: UpdateConversationRequest
-                  details:
-                    - code: required
-                      target: participantIDs
-                      message: participantIDs is a required field
-            missingAuthHeader:
-              summary: Authorization header missing
-              value:
-                error:
-                  code: BadRequest
-                  message: user is not authenticated
-                  target: header
-                  innererror:
-                    code: MissingAuthHeader
-
-    "401":
-      description: JWT is invalid or expired
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          example:
-            error:
-              code: UnauthorizedRequest
-              message: invalid token is being used
-              target: token
-              innererror:
-                code: InvalidOrExpiredToken
-
-    "404":
-      description: Conversation not found or caller is not a member of the conversation
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          example:
-            error:
-              code: NotFoundRequest
-              message: no data was found
-              target: participants
-              innererror:
-                code: NoRecordsFoundWithThatId
-
-    "500":
-      description: Internal server error — JWT decode failure, missing auth context, or DB failure
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          examples:
-            tokenDecodeFailed:
-              summary: Unexpected error decoding the JWT
-              value:
-                error:
-                  code: InternalServerError
-                  message: unexpected error while trying to decode token
-                  target: token
-                  innererror:
-                    code: UnexpectedInternalError
-            missingContext:
-              summary: Auth middleware did not inject user ID
-              value:
-                error:
-                  code: InternalServerError
-                  message: user id is missing in the request header
-                  target: userId
-                  innererror:
-                    code: MissingUserIdContext
-
-    "406":
-      description: Invalid Accept header — must be application/json or */*
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          example:
-            error:
-              code: StatusNotAccepted
-              message: Using invalid accept header format
-
-    "502":
-      description: Database network failure
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          example:
-            error:
-              code: BadGateway
-              message: unexpected error on processing the request
-              target: participants
-              innererror:
-                code: DatabaseFailure
-                innererror:
-                  code: NetworkFailure
-
-    "504":
-      description: Database query timed out
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          example:
-            error:
-              code: Timeout
-              message: request took so long to process
-              target: participants
-              innererror:
-                code: TimeOutHasBeenExceeded
-
-get:
-  summary: List Conversation Participants
-  description: >
-    Fetches all participants of a conversation including the creator (role=owner)
-    and all members (role=member).
-    The caller must be a member of the conversation — returns 404 if not.
-  operationId: getConversationParticipants
-  tags: [Conversations]
-  parameters:
-    - name: id
-      in: path
-      description: The conversation ID to fetch participants for
-      required: true
-      example: 5
-      schema:
-        type: integer
-  security:
-    - JWTAuth: []
-  responses:
-    "200":
-      description: Participants retrieved successfully
-      content:
-        application/json:
-          schema:
-            $ref: ../components/conversation.yml#/ParticipantsList
-
-    "400":
-      description: Invalid conversation ID format, or missing/malformed Authorization header
-      content:
-        application/json:
-          schema:
-            $ref: ../components/error.yml#/Error
-          examples:
-            invalidId:
-              summary: Non-integer conversation ID in path
-              value:
-                error:
-                  code: BadRequest
-                  message: invalid conversation id
-                  target: conversation
-                  innererror:
-                    code: InvalidConversationIdFormatUsedInThePath
+                    code: InvalidTargetIdFormatUsedInThePath
             missingAuthHeader:
               summary: Authorization header missing
               value:
@@ -250,7 +73,7 @@ get:
                 code: InvalidOrExpiredToken
 
     "404":
-      description: Conversation not found or caller has no access
+      description: No pending friend request from the given target to the authenticated user
       content:
         application/json:
           schema:
@@ -259,12 +82,12 @@ get:
             error:
               code: NotFoundRequest
               message: no data was found
-              target: participants
+              target: friendRequest
               innererror:
                 code: NoRecordsFoundWithThatId
 
     "500":
-      description: Internal server error — JWT decode failure, missing auth context, or DB failure
+      description: Internal server error — JWT decode failure, missing auth context, or unexpected DB failure
       content:
         application/json:
           schema:
@@ -288,6 +111,17 @@ get:
                   target: userId
                   innererror:
                     code: MissingUserIdContext
+            dbFailure:
+              summary: Unexpected database error
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error on processing the request
+                  target: friendRequest
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: WrongSyntax
 
     "406":
       description: Invalid Accept header — must be application/json or */*
@@ -310,7 +144,7 @@ get:
             error:
               code: BadGateway
               message: unexpected error on processing the request
-              target: participants
+              target: friendRequest
               innererror:
                 code: DatabaseFailure
                 innererror:
@@ -326,7 +160,170 @@ get:
             error:
               code: Timeout
               message: request took so long to process
-              target: participants
+              target: friendRequest
               innererror:
                 code: TimeOutHasBeenExceeded
 
+delete:
+  summary: Decline Received Friend Request
+  description: >
+    Declines a pending friend request that was sent to the authenticated user by the specified target.
+    sender_id and recipient_id are derived using MIN/MAX of the two user IDs — consistent with how
+    friend requests are stored. The caller must NOT be the author of the request. Returns 404 if no
+    pending request from the target to the caller exists. Returns 204 No Content on success.
+  operationId: declineReceivedFriendRequest
+  tags: [FriendRequests]
+  parameters:
+    - name: targetId
+      in: path
+      description: ID of the user who sent the request
+      required: true
+      example: 4
+      schema:
+        type: integer
+  security:
+    - JWTAuth: []
+  responses:
+    "204":
+      description: Friend request declined successfully — no response body
+
+    "400":
+      description: Invalid targetId format or malformed Authorization header
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            invalidId:
+              summary: Non-integer targetId in path
+              value:
+                error:
+                  code: BadRequest
+                  message: invalid target user id
+                  target: targetId
+                  innererror:
+                    code: InvalidTargetIdFormatUsedInThePath
+            missingAuthHeader:
+              summary: Authorization header missing
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: MissingAuthHeader
+            invalidAuthFormat:
+              summary: Header does not start with "Bearer "
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: InvalidHeaderFormat
+
+    "401":
+      description: JWT is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: UnauthorizedRequest
+              message: invalid token is being used
+              target: token
+              innererror:
+                code: InvalidOrExpiredToken
+
+    "404":
+      description: No pending received request from the target to the caller exists
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: NotFoundRequest
+              message: no data was found
+              target: friendRequest
+              innererror:
+                code: NoRecordsFoundWithThatId
+
+    "500":
+      description: Internal server error — JWT decode failure, missing auth context, or unexpected DB failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            tokenDecodeFailed:
+              summary: Unexpected error decoding the JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to decode token
+                  target: token
+                  innererror:
+                    code: UnexpectedInternalError
+            missingContext:
+              summary: Auth middleware did not inject user ID
+              value:
+                error:
+                  code: InternalServerError
+                  message: user id is missing in the request header
+                  target: userId
+                  innererror:
+                    code: MissingUserIdContext
+            dbFailure:
+              summary: Unexpected database error
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error on processing the request
+                  target: friendRequest
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: WrongSyntax
+
+    "406":
+      description: Invalid Accept header — must be application/json or */*
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: StatusNotAccepted
+              message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: friendRequest
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: friendRequest
+              innererror:
+                code: TimeOutHasBeenExceeded

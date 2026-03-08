@@ -1,0 +1,164 @@
+get:
+  summary: List Friends
+  description: >
+    Returns all accepted friends for the authenticated user.
+    Identity is taken from the JWT — no path parameter needed.
+  operationId: getUserFriends
+  tags: [Users]
+  security:
+    - JWTAuth: []
+  responses:
+    "200":
+      description: Friends list retrieved successfully
+      content:
+        application/json:
+          schema:
+            $ref: ../components/user.yml#/UsersList
+          example:
+            value:
+              - id: "4"
+                email: ahmedtest@gmail.com
+                displayName: AhmedTest Mohamed
+
+    "400":
+      description: Invalid user ID format, or missing/malformed Authorization header
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            invalidId:
+              summary: Non-integer user ID in path
+              value:
+                error:
+                  code: BadRequest
+                  message: invalid user id
+                  target: userId
+                  innererror:
+                    code: InvalidUserIdFormatUsedInThePath
+            missingAuthHeader:
+              summary: Authorization header missing
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: MissingAuthHeader
+            invalidAuthFormat:
+              summary: Header does not start with "Bearer "
+              value:
+                error:
+                  code: BadRequest
+                  message: user is not authenticated
+                  target: header
+                  innererror:
+                    code: InvalidHeaderFormat
+
+    "401":
+      description: JWT is invalid or expired
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: UnauthorizedRequest
+              message: invalid token is being used
+              target: token
+              innererror:
+                code: InvalidOrExpiredToken
+
+    "500":
+      description: Internal server error — JWT decode failure, missing auth context, or unexpected DB failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          examples:
+            tokenDecodeFailed:
+              summary: Unexpected error decoding the JWT
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error while trying to decode token
+                  target: token
+                  innererror:
+                    code: UnexpectedInternalError
+            missingContext:
+              summary: Auth middleware did not inject user ID
+              value:
+                error:
+                  code: InternalServerError
+                  message: user id is missing in the request header
+                  target: userId
+                  innererror:
+                    code: MissingUserIdContext
+            dbFailure:
+              summary: Unexpected database error
+              value:
+                error:
+                  code: InternalServerError
+                  message: unexpected error on processing the request
+                  target: friends
+                  innererror:
+                    code: DatabaseFailure
+                    innererror:
+                      code: WrongSyntax
+
+    "406":
+      description: Invalid Accept header — must be application/json or */*
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: StatusNotAccepted
+              message: Using invalid accept header format
+
+    "502":
+      description: Database network failure
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: BadGateway
+              message: unexpected error on processing the request
+              target: friends
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: NetworkFailure
+
+    "503":
+      description: Database connection pool exhausted or server overloaded
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: ServiceUnavailable
+              message: unexpected error on processing the request
+              target: friends
+              innererror:
+                code: DatabaseFailure
+                innererror:
+                  code: ServiceIsUnavilableDueToManyRequests
+
+    "504":
+      description: Database query timed out
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: Timeout
+              message: request took so long to process
+              target: friends
+              innererror:
+                code: TimeOutHasBeenExceeded

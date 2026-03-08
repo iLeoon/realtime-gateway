@@ -1,0 +1,10 @@
+post:
+  summary: Logout
+  description: >
+    Destroys the JWT session by clearing the HttpOnly `token` cookie.
+    The WebSocket connection should be closed by the client before calling this endpoint.
+  operationId: logout
+  tags: [Auth]
+  responses:
+    "204":
+      description: Session destroyed successfully, token cookie cleared

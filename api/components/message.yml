@@ -3,8 +3,8 @@ Message:
   description: Represents a single message in a conversation
   required:
     - id
-    - creatorId
-    - conversationId
+    - creatorID
+    - conversationID
     - content
     - createdAt
   properties:
@@ -13,12 +13,12 @@ Message:
       description: Message's unique identifier
       example: "101"
 
-    creatorId:
+    creatorID:
       type: string
       description: ID of the user who sent the message
       example: "22"
 
-    conversationId:
+    conversationID:
       type: string
       description: ID of the conversation this message belongs to
       example: "5"
@@ -33,6 +33,13 @@ Message:
       format: date-time
       description: Timestamp when the message was created
       example: "2026-03-01T13:00:00Z"
+
+    editedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: Timestamp when the message was last edited, null if never edited
+      example: "2026-03-01T14:00:00Z"
 
 MessagesList:
   type: object

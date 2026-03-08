@@ -5,6 +5,7 @@ Participant:
     - id
     - displayName
     - email
+    - displayImage
     - joinedDate
     - role
   properties:
@@ -24,6 +25,11 @@ Participant:
       description: User's email address
       example: ahmed@gmail.com
 
+    displayImage:
+      type: string
+      description: URL of the user's avatar image
+      example: "https://lh3.googleusercontent.com/a/photo.jpg"
+
     joinedDate:
       type: string
       format: date-time
@@ -32,8 +38,9 @@ Participant:
 
     role:
       type: string
-      description: User's role in the conversation
-      example: admin
+      description: User's role in the conversation — owner for the creator, member for everyone else
+      enum: [owner, member]
+      example: member
 
 ParticipantsList:
   type: object
@@ -50,7 +57,7 @@ Conversation:
   description: Represents a conversation between two or more users
   required:
     - id
-    - creatorId
+    - creatorID
     - conversationType
     - createdDate
     - participants
@@ -60,7 +67,7 @@ Conversation:
       description: Conversation's unique identifier
       example: "5"
 
-    creatorId:
+    creatorID:
       type: string
       description: ID of the user who created the conversation
       example: "22"
@@ -70,6 +77,12 @@ Conversation:
       description: Type of conversation
       enum: [private-chat, group-chat]
       example: private-chat
+
+    groupName:
+      type: string
+      nullable: true
+      description: Display name of the group — only present for group-chat conversations
+      example: "Gaming Squad"
 
     createdDate:
       type: string
@@ -83,6 +96,43 @@ Conversation:
       items:
         $ref: "#/Participant"
 
+ConversationCreatedResponse:
+  type: object
+  description: Returned after successfully creating a conversation. Does not include participants — follow the Location header to GET /conversations/{id} for the full resource.
+  required:
+    - id
+    - creatorID
+    - conversationType
+    - createdDate
+  properties:
+    id:
+      type: string
+      description: Conversation's unique identifier
+      example: "5"
+
+    creatorID:
+      type: string
+      description: ID of the user who created the conversation
+      example: "22"
+
+    conversationType:
+      type: string
+      description: Type of conversation
+      enum: [private-chat, group-chat]
+      example: group-chat
+
+    groupName:
+      type: string
+      nullable: true
+      description: Display name of the group — only present for group-chat, null for private-chat
+      example: "Gaming Squad"
+
+    createdDate:
+      type: string
+      format: date-time
+      description: Timestamp when the conversation was created
+      example: "2026-01-15T10:00:00Z"
+
 ConversationsList:
   type: object
   required:
@@ -93,19 +143,51 @@ ConversationsList:
       items:
         $ref: "#/Conversation"
 
+UpdateConversationRequest:
+  type: object
+  description: Request body for adding participants to a group conversation.
+  required:
+    - participantIDs
+  properties:
+    participantIDs:
+      type: array
+      description: List of user IDs to add to the conversation. Users already in the conversation are ignored.
+      minItems: 1
+      maxItems: 50
+      uniqueItems: true
+      items:
+        type: integer
+        example: 44
+
 ConversationRequest:
   type: object
+  description: >
+    Request body for creating a conversation.
+    For private-chat, exactly one participantID must be provided and groupName must be omitted.
+    For group-chat, one or more participantIDs must be provided (max 50) and groupName is required.
   required:
-    - recipientID
+    - participantIDs
     - conversationType
   properties:
-    recipientID:
-      type: string
-      description: ID of the user to start a conversation with
-      example: "33"
+    participantIDs:
+      type: array
+      description: List of user IDs to add to the conversation (excluding the creator who is added automatically)
+      minItems: 1
+      maxItems: 50
+      uniqueItems: true
+      items:
+        type: integer
+        example: 33
 
     conversationType:
       type: string
       description: Type of conversation to create
       enum: [private-chat, group-chat]
-      example: private-chat
+      example: group-chat
+
+    groupName:
+      type: string
+      description: Display name for the group — required for group-chat, must be between 10 and 50 characters
+      minLength: 10
+      maxLength: 50
+      example: "Gaming Squad"

@@ -152,10 +152,14 @@ get:
 post:
   summary: Create Conversation
   description: >
-    Creates a new conversation. The authenticated user becomes the creator.
-    Supported types are private-chat and group-chat.
-    Creating a duplicate private-chat between the same two users returns 400.
-    On success returns 201 with a Location header.
+    Creates a new private or group conversation. The authenticated user becomes the creator
+    and is automatically added as a member (role=owner).
+
+    Rules:
+      - private-chat: exactly one participantID, groupName must be omitted. Creating a duplicate private-chat between the same two users returns 400.
+      - group-chat: one or more participantIDs (max 50), groupName is required (10–50 characters).
+
+    On success returns 201 with a Location header pointing to the full resource.
   operationId: createConversation
   tags: [Conversations]
   security:
@@ -166,6 +170,18 @@ post:
       application/json:
         schema:
           $ref: ../components/conversation.yml#/ConversationRequest
+        examples:
+          privateChat:
+            summary: Create a private chat
+            value:
+              participantIDs: [33]
+              conversationType: private-chat
+          groupChat:
+            summary: Create a group chat
+            value:
+              participantIDs: [33, 44, 55]
+              conversationType: group-chat
+              groupName: "Gaming Squad"
   responses:
     "201":
       description: Conversation created successfully
@@ -178,7 +194,7 @@ post:
       content:
         application/json:
           schema:
-            $ref: ../components/conversation.yml#/Conversation
+            $ref: ../components/conversation.yml#/ConversationCreatedResponse
 
     "400":
       description: Invalid request body, validation failure, duplicate private-chat, or malformed auth header
@@ -200,10 +216,13 @@ post:
               summary: Missing or invalid fields
               value:
                 error:
-                  code: BadArgumet
+                  code: BadArgument
                   message: invalid argument
                   target: ConversationRequest
                   details:
+                    - code: required
+                      target: participantIDs
+                      message: participantIDs is a required field
                     - code: required
                       target: conversationType
                       message: conversationType is a required field

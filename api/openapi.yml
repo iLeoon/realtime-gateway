@@ -23,6 +23,8 @@ tags:
     description: Conversation and participant management
   - name: Messages
     description: Message retrieval within conversations
+  - name: FriendRequests
+    description: Friend request management — send, list sent, and list received requests
   - name: WebSocket
     description: WebSocket connection token issuance
 
@@ -31,8 +33,14 @@ paths:
     $ref: ./paths/auth.yml
   /auth/redirect/oauth/google/callback:
     $ref: ./paths/auth_callback.yml
+  /auth/logout:
+    $ref: ./paths/auth_logout.yml
   /users/{id}:
     $ref: ./paths/users_{id}.yml
+  /users/friends:
+    $ref: ./paths/users_friends.yml
+  /users/friends/{targetId}:
+    $ref: ./paths/users_friends_{targetId}.yml
   /ws/token:
     $ref: ./paths/ws.yml
   /conversations:
@@ -43,83 +51,18 @@ paths:
     $ref: ./paths/conversations_{id}_participants.yml
   /conversations/{id}/messages:
     $ref: ./paths/conversations_{id}_messages.yml
+  /friendrequests:
+    $ref: ./paths/friendrequests.yml
+  /friendrequests/sent:
+    $ref: ./paths/friendrequests_sent.yml
+  /friendrequests/received:
+    $ref: ./paths/friendrequests_received.yml
+  /friendrequests/sent/{targetId}:
+    $ref: ./paths/friendrequests_sent_{targetId}.yml
+  /friendrequests/received/{targetId}:
+    $ref: ./paths/friendrequests_received_{targetId}.yml
 
 components:
-  responses:
-    NotAcceptable:
-      description: Invalid Accept header — must be application/json or */*
-      content:
-        application/json:
-          schema:
-            $ref: ./components/error.yml#/Error
-          example:
-            error:
-              code: StatusNotAccepted
-              message: Using invalid accept header format
-
-    MissingAuthHeader:
-      description: Authorization header is missing or malformed
-      content:
-        application/json:
-          schema:
-            $ref: ./components/error.yml#/Error
-          examples:
-            missingHeader:
-              summary: Authorization header not present
-              value:
-                error:
-                  code: BadRequest
-                  message: user is not authenticated
-                  target: header
-                  innererror:
-                    code: MissingAuthHeader
-            invalidFormat:
-              summary: Header does not start with "Bearer "
-              value:
-                error:
-                  code: BadRequest
-                  message: user is not authenticated
-                  target: header
-                  innererror:
-                    code: InvalidHeaderFormat
-            missingToken:
-              summary: Bearer prefix present but token is empty
-              value:
-                error:
-                  code: BadRequest
-                  message: user is not authenticated
-                  target: header
-                  innererror:
-                    code: MissingAuthToken
-
-    InvalidToken:
-      description: JWT is invalid or expired
-      content:
-        application/json:
-          schema:
-            $ref: ./components/error.yml#/Error
-          example:
-            error:
-              code: UnauthorizedRequest
-              message: invalid token is being used
-              target: token
-              innererror:
-                code: InvalidOrExpiredToken
-
-    TokenDecodeFailure:
-      description: Unexpected internal error while decoding the JWT
-      content:
-        application/json:
-          schema:
-            $ref: ./components/error.yml#/Error
-          example:
-            error:
-              code: InternalServerError
-              message: unexpected error while trying to decode token
-              target: token
-              innererror:
-                code: UnexpectedInternalError
-
   securitySchemes:
     GoogleOAuth:
       description: google's provider

@@ -1,0 +1,103 @@
+FriendRequestUser:
+  type: object
+  description: Minimal user projection embedded inside a friend request
+  required:
+    - id
+    - displayName
+    - email
+    - displayImage
+  properties:
+    id:
+      type: string
+      description: User's unique identifier
+      example: "1"
+    displayName:
+      type: string
+      description: User's display name
+      example: Ahmed
+    email:
+      type: string
+      format: email
+      description: User's email address
+      example: ahmed@gmail.com
+    displayImage:
+      type: string
+      description: URL of the user's avatar image
+      example: "https://lh3.googleusercontent.com/a/photo.jpg"
+
+FriendRequest:
+  type: object
+  description: Raw friend request row returned after creation
+  required:
+    - senderId
+    - recipientId
+    - authorId
+    - status
+    - createdAt
+  properties:
+    senderId:
+      type: string
+      description: ID of the user with the lower numeric ID (enforced for deduplication)
+      example: "1"
+    recipientId:
+      type: string
+      description: ID of the user with the higher numeric ID
+      example: "4"
+    authorId:
+      type: string
+      description: ID of the user who actually initiated the request
+      example: "1"
+    status:
+      type: string
+      description: Current status of the friend request
+      enum: [pending, accepted, rejected]
+      example: pending
+    createdAt:
+      type: string
+      format: date-time
+      example: "2026-03-05T11:22:08.048899Z"
+
+FriendRequestDetailed:
+  type: object
+  description: Enriched friend request with full user objects for sender, recipient and creator
+  required:
+    - sender
+    - recipient
+    - creator
+    - status
+    - createdAt
+  properties:
+    sender:
+      $ref: "#/FriendRequestUser"
+    recipient:
+      $ref: "#/FriendRequestUser"
+    creator:
+      $ref: "#/FriendRequestUser"
+    status:
+      type: string
+      enum: [pending, accepted, rejected]
+      example: pending
+    createdAt:
+      type: string
+      format: date-time
+      example: "2026-03-05T11:22:08.048899Z"
+
+FriendRequestList:
+  type: object
+  required:
+    - value
+  properties:
+    value:
+      type: array
+      items:
+        $ref: "#/FriendRequestDetailed"
+
+FriendRequestBody:
+  type: object
+  required:
+    - recipientId
+  properties:
+    recipientId:
+      type: string
+      description: ID of the user to send the friend request to (sent as a quoted string per API guidelines)
+      example: "4"
