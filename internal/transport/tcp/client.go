@@ -2,9 +2,9 @@ package tcp
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -17,11 +17,11 @@ import (
 )
 
 type Router interface {
-	Route(p packets.BuildPayload, userId string)
+	Route(p packets.BuildPayload, userId string, connectionID uint32)
 }
 
 type Signaler interface {
-	Signal(userId string, connectionId uint32)
+	Signal(userId string, connectionId uint32, code int, reason string)
 }
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -66,10 +66,9 @@ func NewFactory(c *config.Config, r Router, s Signaler) *tcpClientFactory {
 // between the websocket gateway and tcp server
 // to send/receive messages.
 func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (session.Session, error) {
-	conn, err := net.Dial("tcp", t.config.TCP.TcpPort)
+	conn, err := net.Dial("tcp", t.config.TcpPort)
 	if err != nil {
 		return nil, err
-
 	}
 
 	log.Info.Println("The tcp client successfully established a connection between websocket gateway and tcp server")
@@ -103,39 +102,95 @@ func (t *tcpClient) WriteToServer(data []byte) error {
 	// Unmarshal the incmoing byets from the gateway to the client payload struct
 	err := json.Unmarshal(data, cp)
 	if err != nil {
-		return err
+		return errors.B(path, op, errors.Client, err)
 	}
 
-	// Check the message type (opcode) based on the ClientPayload.Opcode.
+	// Check the message type (opcode) based on the ClientPayload.Opcode
+	// then build the packet and pass to writePacket to send it
+	// into the raw tcp connection
 	switch cp.Opcode {
 	case "send_message":
 		// Build the readable packet.
 		var data SendMessagePayload
 		err := json.Unmarshal(cp.Payload, &data)
 		if err != nil {
-			return err
+			return errors.B(path, op, err, errors.Client)
 		}
 		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
 		if err != nil {
-			return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert conversationID to int: %v", err))
-		}
-		recipientIDToInt, err := strconv.ParseUint(data.RecipientUserID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, fmt.Errorf("failed to convert recipientUserID to int: %v", err))
+			return errors.B(path, op, errors.Client, err)
 		}
 
 		pkt = &packets.SendMessagePacket{
-			ConversationID:  uint32(convIDToInt),
-			RecipientUserID: uint32(recipientIDToInt),
-			Content:         data.Content,
+			ConversationID: uint32(convIDToInt),
+			Content:        data.Content,
+		}
+	case "update_message":
+		var data UpdateMessagePayload
+		err := json.Unmarshal(cp.Payload, &data)
+		if err != nil {
+			return errors.B(path, op, err, errors.Client)
+		}
+
+		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, err)
+		}
+
+		messageIDToInt, err := strconv.ParseUint(data.MessageID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, err)
+		}
+
+		pkt = &packets.UpdateMessagePacket{
+			ConversationID: uint32(convIDToInt),
+			MessageID:      uint32(messageIDToInt),
+			Content:        data.Content,
+		}
+
+	case "delete_message":
+		var data DeleteMessagePayload
+		err := json.Unmarshal(cp.Payload, &data)
+		if err != nil {
+			return errors.B(path, op, err, errors.Client)
+		}
+
+		messageIDToInt, err := strconv.ParseUint(data.MessageID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, err)
+		}
+
+		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, err)
+		}
+		pkt = &packets.DeleteMessagePacket{
+			MessageID:      uint32(messageIDToInt),
+			ConversationID: uint32(convIDToInt),
+		}
+
+	case "typing":
+		var data TypingPayload
+		err := json.Unmarshal(cp.Payload, &data)
+		if err != nil {
+			return errors.B(path, op, err, errors.Client)
+		}
+
+		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
+		if err != nil {
+			return errors.B(path, op, errors.Client, err)
+		}
+
+		pkt = &packets.TypingPacket{
+			ConversationID: uint32(convIDToInt),
+			IsTyping:       data.IsTyping,
 		}
 	default:
-		return fmt.Errorf("Invalid packet type %s", cp.Opcode)
+		return errors.B(path, op, errors.Client, errors.Errorf("Invalid packet type %T", cp.Opcode))
 	}
 
-	if err := t.connectionHygiene(pkt); err != nil {
-		t.conn.Close()
-		return err
+	if err := t.writePacket(pkt); err != nil {
+		return errors.B(path, op, err)
 	}
 	return nil
 }
@@ -148,36 +203,70 @@ func (t *tcpClient) WriteToServer(data []byte) error {
 // This method must run inside its own goroutine because it performs
 // blocking I/O while waiting for incoming data from the TCP connection.
 func (t *tcpClient) ReadFromServer() {
+	const path errors.PathName = "tcp/client"
+	const op errors.Op = "tcpClient.ReadFromServer"
+	wsCode := 1011 // default: internal server error
+	var reason string
 	defer func() {
-		t.signal.Signal(t.userID, t.connectionID)
+		t.signal.Signal(t.userID, t.connectionID, wsCode, reason)
 		t.conn.Close()
-		log.Info.Println("Gateway closed connection to tcp server")
+		log.Info.Printf("%q: %q: tcp client terminated it's connection", path, op)
 	}()
 
 	for {
 		// Decode the frame.
-		t.conn.SetReadDeadline(time.Now().Add(readDuration))
+		if err := t.conn.SetReadDeadline(time.Now().Add(readDuration)); err != nil {
+			wrappedErr := errors.B(path, op, err)
+			log.Error.Println("failed to read the packet from the peer", wrappedErr)
+			return
+		}
 		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				log.Info.Println("TCP connection is closed by peer(server)")
+			// Error that gives context to the rest of the logs
+			wrappedErr := errors.B(path, op, err)
+			switch {
+			case errors.Is(err, io.EOF):
+				log.Info.Println("TCP connection is closed by peer(server)", wrappedErr)
+				wsCode, reason = 1006, "server closed connection"
+				return
+			case errors.Is(err, net.ErrClosed):
+				wsCode, reason = 1000, "connection is closed"
+				return
+			case errors.Is(err, os.ErrDeadlineExceeded):
+				wsCode, reason = 1006, "unexpected failure please refresh"
+				log.Info.Println("read deadline exceeded, closing connection", wrappedErr)
+				return
+			default:
+				log.Error.Println("unexpected error from the tcp server", wrappedErr)
+				wsCode, reason = 1011, "connection is terminated"
 				return
 			}
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-
-			log.Error.Println("unexpected tcp read error", err)
-			return
 		}
 
 		switch pkt := frame.Payload.(type) {
 		case *packets.PingPacket:
-			t.pongRes()
+			if err := t.pongRes(); err != nil {
+				errorWrapper := errors.B(path, op, err)
+				log.Error.Println("pong packet failed", errorWrapper)
+				wsCode, reason = 1006, "unexpected failure please refresh"
+				return
+			}
 		case *packets.ErrorPacket:
-			t.router.Route(pkt, t.userID)
+			if pkt.Code == errors.Client {
+				wsCode, reason = 1008, pkt.Message // protocol error
+				return
+			}
+
 		case *packets.ResponseMessagePacket:
-			t.router.Route(pkt, t.userID)
+			t.router.Route(pkt, t.userID, t.connectionID)
+		case *packets.ResponseUpdateMessagePacket:
+			t.router.Route(pkt, t.userID, t.connectionID)
+		case *packets.ResponseDeleteMessagePacket:
+			t.router.Route(pkt, t.userID, t.connectionID)
+		case *packets.ResponseTypingPacket:
+			t.router.Route(pkt, t.userID, t.connectionID)
+		case *packets.ResponsePresencePacket:
+			t.router.Route(pkt, t.userID, t.connectionID)
 		}
 		log.Info.Println("Decode packet", "packet", frame.Payload.String())
 	}
@@ -197,14 +286,14 @@ func (t *tcpClient) OnConnect() error {
 	// as uint32 internally to avoid repeated string conversions.
 	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
 	if err != nil {
-		return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert userID to int: %v", err))
+		return errors.B(path, op, errors.Client, "faild to convert userID to int", err)
 
 	}
 	pkt := &packets.ConnectPacket{
 		ConnectionID: t.connectionID,
 		UserID:       uint32(userIDToInt),
 	}
-	if err := t.connectionHygiene(pkt); err != nil {
+	if err := t.writePacket(pkt); err != nil {
 		return errors.B(path, op, err)
 	}
 	return nil
@@ -217,13 +306,13 @@ func (t *tcpClient) OnDisConnect() error {
 
 	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
 	if err != nil {
-		return errors.B(path, op, errors.Client, fmt.Errorf("faild to convert userID to int: %v", err))
+		return errors.B(path, op, errors.Client, "faild to convert userID to int", err)
 	}
 	pkt := &packets.DisconnectPacket{
 		ConnectionID: t.connectionID,
 		UserID:       uint32(userIDToInt),
 	}
-	if err := t.connectionHygiene(pkt); err != nil {
+	if err := t.writePacket(pkt); err != nil {
 		return errors.B(path, op, err)
 	}
 	return nil
@@ -233,17 +322,19 @@ func (t *tcpClient) pongRes() error {
 	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.pongRes"
 	pkt := &packets.PongPacket{}
-	if err := t.connectionHygiene(pkt); err != nil {
+	if err := t.writePacket(pkt); err != nil {
 		return errors.B(path, op, err)
 	}
 	return nil
 }
 
-func (t *tcpClient) connectionHygiene(pkt packets.BuildPayload) error {
+// writePacket constructs the frame and write it
+// into the raw tcp connection
+func (t *tcpClient) writePacket(pkt packets.BuildPayload) error {
 	const path errors.PathName = "tcp/client"
-	const op errors.Op = "t.connectionHygiene"
+	const op errors.Op = "tcpClient.writePacket"
 	if err := t.conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
-		return errors.B(path, op, errors.Internal, fmt.Errorf("connection is unhealty: %w", err))
+		return errors.B(path, op, "connection is unhealthy", err)
 	}
 
 	// Construct the frame, encode it, and then send it to the TCP server.

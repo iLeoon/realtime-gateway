@@ -31,3 +31,27 @@ type SendMessagePayload struct {
 	ConversationID  string `json:"conversationID"`
 	RecipientUserID string `json:"recipientUserID"`
 }
+
+// UpdateMessagePayload is the JSON structure used by the browser to send a
+// chat message that needs to be updated. It is extracted from the ClientPayload's raw JSON payload
+// when the opcode indicates a send-message operation.
+type UpdateMessagePayload struct {
+	MessageID      string `json:"messageID"`
+	Content        string `json:"content"`
+	ConversationID string `json:"conversationID"`
+}
+
+// DeleteMessagePayload the JSON structure used by the browser to send a
+// chat message that needs to be deleted. It is extracted from the ClientPayload's raw JSON payload
+// when the opcode indicates a send-message operation.
+type DeleteMessagePayload struct {
+	MessageID      string `json:"messageID"`
+	ConversationID string `json:"conversationID"`
+}
+
+// TypingPayload is the JSON structure used by the browser to signal a
+// typing status change inside a conversation.
+type TypingPayload struct {
+	ConversationID string `json:"conversationID"`
+	IsTyping       bool   `json:"isTyping"`
+}
