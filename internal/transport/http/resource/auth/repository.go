@@ -39,19 +39,22 @@ func (r *repository) CreateOrUpdateUser(ctx context.Context, pi ProviderIdentity
 		}
 	}()
 
-	err = tx.QueryRow(ctx, `INSERT INTO users (username, email)
-			VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET username = EXCLUDED.username RETURNING user_id, email, username`,
+	err = tx.QueryRow(ctx, `INSERT INTO users (username, email, avatar_url)
+			VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET username = EXCLUDED.username, avatar_url = EXCLUDED.avatar_url
+			RETURNING user_id, username, email`,
 		pi.Name,
-		pi.Email).Scan(&user.UserID, &user.Email, &user.UserName)
+		pi.Email,
+		pi.PictureURL).Scan(&user.UserID, &user.UserName, &user.Email)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 	}
 
-	_, err = tx.Exec(ctx, `INSERT INTO providers (provider, provider_user_id, user_id)
-			VALUES ($1, $2, $3) ON CONFLICT (provider, provider_user_id) DO NOTHING`,
+	_, err = tx.Exec(ctx, `INSERT INTO providers (provider, provider_user_id, user_id, provider_avatar_url)
+			VALUES ($1, $2, $3, $4) ON CONFLICT (provider, provider_user_id) DO UPDATE SET provider_avatar_url = EXCLUDED.provider_avatar_url`,
 		pi.Provider,
 		pi.ProviderID,
 		user.UserID,
+		pi.PictureURL,
 	)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)

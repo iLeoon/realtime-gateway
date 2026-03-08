@@ -39,7 +39,7 @@ func (h *Handler) GenerateTicket(w http.ResponseWriter, r *http.Request) {
 
 	jwtToken, err := h.service.GenerateWsToken(authenticatedId)
 	if err != nil {
-		log.Error.Println("error on generating the websocket ticket", "error", err)
+		log.Error.Println("error on generating the websocket ticket", err)
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToGenerateToken("GeneratingWsJwtTokenFailed"))
 		return
 	}

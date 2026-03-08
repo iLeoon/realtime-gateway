@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
@@ -69,10 +70,19 @@ func (s *service) HandleToken(p *idtoken.Payload, ctx context.Context) (*User, *
 		return nil, apiErr, statusCode
 	}
 
+	pic, ok := p.Claims["picture"].(string)
+	if !ok || pic == "" {
+		pic = ""
+	} else {
+		// Change 96px to 256px for better quality
+		pic = strings.Replace(pic, "=s96-c", "=s256-c", 1)
+	}
+
 	provider := ProviderIdentity{
 		ProviderID: p.Subject,
 		Email:      email,
 		Name:       name,
+		PictureURL: pic,
 		Provider:   "google",
 	}
 

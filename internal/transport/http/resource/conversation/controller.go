@@ -12,13 +12,15 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Service interface {
-	Create(ctx context.Context, creatorId string, cr ConversationRequest) (c *Conversation, a *apierror.APIError, statusCode int)
+	Create(ctx context.Context, creatorId string, body ConversationRequest) (c *ConversationCreatedResponse, a *apierror.APIError, statusCode int)
 	Find(ctx context.Context, conversationId string, userId string) (c *Conversation, a *apierror.APIError, statusCode int)
 	FindAll(ctx context.Context, conversationId string) (cl ConversationsList, a *apierror.APIError, statusCode int)
 	GetMembers(ctx context.Context, conversationId string, userId string) (pl ParticipantsList, a *apierror.APIError, statusCode int)
+	UpdateParticipants(ctx context.Context, conversationId string, requesterId string, body UpdateConversationRequest) (pl ParticipantsList, a *apierror.APIError, statusCode int)
 }
 
 // Use message service
@@ -45,6 +47,7 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 	convMux.HandleFunc("GET /conversations/{id}", h.GetConversation)
 	convMux.HandleFunc("POST /conversations", h.Create)
 	convMux.HandleFunc("GET /conversations/{id}/participants", h.GetMembers)
+	convMux.HandleFunc("PATCH /conversations/{id}/participants", h.UpdateMembers)
 
 	convMux.HandleFunc("GET /conversations/{id}/messages", h.ListMessages)
 
@@ -52,7 +55,7 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var cr ConversationRequest
+	var body ConversationRequest
 
 	// authenticatedId represents the conversation creator who initiated the request.
 	authenticatedId, ok := ctx.UserId(r.Context())
@@ -62,18 +65,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate the json format
-	if err := json.NewDecoder(r.Body).Decode(&cr); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidJSONFormat())
 		return
 	}
 
 	// Validate the actual request body fields
-	if err := validation.Validate(cr); err != nil {
+	if err := validation.Validate(body); err != nil {
+		log.Error.Println(err)
 		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("ConversationRequest", err))
 		return
 	}
 
-	conversation, apiErr, statusCode := h.service.Create(r.Context(), authenticatedId, cr)
+	conversation, apiErr, statusCode := h.service.Create(r.Context(), authenticatedId, body)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -151,6 +155,46 @@ func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forcing an empty array as a response if the collection is null
+	if participants.Value == nil {
+		participants.Value = []Participant{}
+	}
+	apiresponse.Send(w, http.StatusOK, participants)
+}
+
+func (h *Handler) UpdateMembers(w http.ResponseWriter, r *http.Request) {
+	authenticatedId, ok := ctx.UserId(r.Context())
+	if !ok {
+		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
+		return
+	}
+
+	conversationId := r.PathValue("id")
+	if _, err := strconv.Atoi(conversationId); err != nil {
+		apiErr := apierror.Build(apierror.BadRequestCode, "invalid conversation id",
+			apierror.WithTarget("conversation"),
+			apierror.WithInnerError("InvalidConversationIdFormatUsedInThePath"))
+		apiresponse.Send(w, http.StatusBadRequest, apiErr)
+		return
+	}
+
+	var body UpdateConversationRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidJSONFormat())
+		return
+	}
+
+	if err := validation.Validate(body); err != nil {
+		log.Error.Println(err)
+		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("UpdateConversationRequest", err))
+		return
+	}
+
+	participants, apiErr, statusCode := h.service.UpdateParticipants(r.Context(), conversationId, authenticatedId, body)
+	if apiErr != nil {
+		apiresponse.Send(w, statusCode, apiErr)
+		return
+	}
+
 	if participants.Value == nil {
 		participants.Value = []Participant{}
 	}

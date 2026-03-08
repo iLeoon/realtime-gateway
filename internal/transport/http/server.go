@@ -10,6 +10,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/middleware"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/auth"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/conversation"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/friendrequest"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/message"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/token"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/user"
@@ -35,9 +36,6 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	// Wraping the api mux with CORS.
 	handler = middleware.Cors(handler, conf)
 
-	// Wraping the api mux with Rate limiter
-	handler = middleware.RateLimiter(handler, rl)
-
 	jwtService := token.NewService(conf)
 
 	authRepo := auth.NewRepo(db)
@@ -55,21 +53,26 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	convServ := conversation.NewService(convRepo)
 	convHandler := conversation.NewHandler(convServ, msgServ)
 
-	wsHandler := websocket.NewHandler(jwtService)
+	frRepo := friendrequest.NewRepo(db)
+	frServ := friendrequest.NewService(frRepo)
+	frHandler := friendrequest.NewHandler(frServ)
 
-	// Specifying the version.
-	rootMux.Handle("/api/v1.0/", http.StripPrefix("/api/v1.0", rootMux))
+	wsHandler := websocket.NewHandler(jwtService)
 
 	userMux := userHandler.RegisterRoutes()
 	authMux := authHandler.RegisterRoutes()
 	convMux := convHandler.RegisterRoutes()
+	frMux := frHandler.RegisterRoutes()
 	wsMux := wsHandler.RegsiterRoutes()
 
-	rootMux.Handle("/auth/", authMux)
+	rootMux.Handle("/auth/", middleware.RateLimiter(authMux, rl))
 	rootMux.Handle("/users/", middleware.AuthGuard(userMux, jwtService))
 
 	rootMux.Handle("/conversations/", middleware.AuthGuard(convMux, jwtService))
 	rootMux.Handle("/conversations", middleware.AuthGuard(convMux, jwtService))
+
+	rootMux.Handle("/friendrequests/", middleware.AuthGuard(frMux, jwtService))
+	rootMux.Handle("/friendrequests", middleware.AuthGuard(frMux, jwtService))
 
 	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
@@ -84,6 +87,9 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 		ErrorLog:          log.NewStdLogger(log.Info),
 		Handler:           handler,
 	}
+
+	// Register versioned prefix after handler is built so middleware is preserved.
+	rootMux.Handle("/api/v1.0/", http.StripPrefix("/api/v1.0", rootMux))
 
 	log.Info.Println("http server is up and running...")
 

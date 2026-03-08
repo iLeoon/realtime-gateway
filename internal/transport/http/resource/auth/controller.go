@@ -49,8 +49,21 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 	authMux.HandleFunc("GET /auth/login", h.Login)
 	authMux.HandleFunc("GET /auth/redirect/oauth/google/callback", h.RedirectURL)
 	authMux.HandleFunc("POST /auth/test", h.TestDBLoad)
+	authMux.HandleFunc("POST /auth/logout", h.Logout)
 	return authMux
 
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    "",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +141,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 	token, err := h.service.GoogleClient().Exchange(ctx, code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
 		statusCode, apiErr, err := h.service.BackChannelError(err)
-		log.Error.Println("unexpected error occurred", "error", err)
+		log.Error.Println("unexpected error occurred", err)
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
@@ -154,13 +167,13 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userId, apiErr, statusCode := h.service.HandleToken(payload, r.Context())
+	user, apiErr, statusCode := h.service.HandleToken(payload, r.Context())
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
 
-	jwtToken, err := h.token.GenerateHttpToken(userId.UserID)
+	jwtToken, err := h.token.GenerateHttpToken(user.UserID)
 	if err != nil {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToGenerateToken("GeneratingHttpJwtTokenFailed"))
 		return

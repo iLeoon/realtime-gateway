@@ -5,14 +5,14 @@ package models
 import "time"
 
 type Message struct {
-	MessageID      string    `json:"id"`
-	CreatorID      string    `json:"creatorId"`
-	ConversationID string    `json:"conversationId"`
-	Content        string    `json:"content"`
-	CreatedAt      time.Time `json:"createdAt"`
+	MessageID      string     `json:"id"`
+	CreatorID      string     `json:"creatorID"`
+	ConversationID string     `json:"conversationID"`
+	Content        string     `json:"content"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	EditedAt       *time.Time `json:"editedAt"`
 }
 
 type MessagesList struct {
 	Value []Message `json:"value"`
 }
-
