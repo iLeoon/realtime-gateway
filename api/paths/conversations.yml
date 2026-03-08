@@ -152,12 +152,10 @@ get:
 post:
   summary: Create Conversation
   description: >
-    Creates a new private or group conversation. The authenticated user becomes the creator
-    and is automatically added as a member (role=owner).
+    Creates a new private or group conversation.
 
     Rules:
-      - private-chat: exactly one participantID, groupName must be omitted. Creating a duplicate private-chat between the same two users returns 400.
-      - group-chat: one or more participantIDs (max 50), groupName is required (10–50 characters).
+      - group-chat: one or more participantIDs (max 50).
 
     On success returns 201 with a Location header pointing to the full resource.
   operationId: createConversation
