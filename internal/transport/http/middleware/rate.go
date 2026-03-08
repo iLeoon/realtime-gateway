@@ -1,6 +1,10 @@
 package middleware
 
+
+// It is inspired by the rate limiter implementation in the Upspin project.
+// See: github.com/upspin/upspin
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -30,8 +34,8 @@ type request struct {
 
 func NewRateLimiter() *rateLimiter {
 	return &rateLimiter{
-		backoff: 2 * time.Second,
-		max:     2 * time.Hour,
+		backoff: 1 * time.Second,
+		max:     24 * time.Hour,
 	}
 
 }
@@ -53,18 +57,18 @@ func (r *rateLimiter) pass(now time.Time, key string) (bool, time.Duration) {
 		}
 		r.m[key] = req
 
-		// if no elements in the list add the first element
-		if r.first == nil {
-			r.first = req
-		}
-		r.last = req
-
-		// if there is an element just push them to the end
 		if r.last != nil {
 			r.last.next = req
 			req.prev = r.last
 		}
 
+		r.last = req
+		// if no elements in the list add the first element
+		if r.first == nil {
+			r.first = req
+		}
+
+		// if there is an element just push them to the end
 	} else {
 		reset := req.seen.Add(r.max)
 
@@ -124,7 +128,8 @@ func (r *rateLimiter) pass(now time.Time, key string) (bool, time.Duration) {
 
 func RateLimiter(next http.Handler, rl *rateLimiter) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, retryAfter := rl.pass(time.Now(), getIP(r))
+		fmt.Println(rl.m)
+		ok, retryAfter := rl.pass(time.Now(), getKey(r))
 		if !ok {
 			w.Header().Set("Retry-After", retryAfter.String())
 			apiErr := apierror.Build(apierror.RateLimitCode,
@@ -137,6 +142,18 @@ func RateLimiter(next http.Handler, rl *rateLimiter) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func getKey(r *http.Request) string {
+	forwarded := r.Header.Get("X-Forwarded-For")
+	var ip string
+	if forwarded != "" {
+		ips := strings.Split(forwarded, ",")
+		ip = strings.TrimSpace(ips[0])
+	} else {
+		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+	}
+	return ip + r.URL.Path
 }
 
 func getIP(r *http.Request) string {
