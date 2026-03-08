@@ -1,5 +1,8 @@
 package errors
 
+// It is inspired by the error implementation in the Upspin project.
+// See: github.com/upspin/upspin
+
 import (
 	"bytes"
 	"fmt"

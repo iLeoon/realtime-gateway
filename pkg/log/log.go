@@ -1,5 +1,6 @@
 package log
-
+// It is inspired by the logger implementation in the Upspin project.
+// See: github.com/upspin/upspin
 import (
 	"bytes"
 	"fmt"
