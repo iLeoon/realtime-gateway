@@ -9,11 +9,11 @@ import (
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
 	"github.com/iLeoon/realtime-gateway/internal/errors"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/models"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/idtoken"
 )
 
 const path errors.PathName = "auth/service"
@@ -50,39 +50,34 @@ func (s *service) GenerateOAuthUrl(verifier string, state string) string {
 
 }
 
-func (s *service) HandleToken(p *idtoken.Payload, ctx context.Context) (*User, *apierror.APIError, int) {
+func (s *service) HandleToken(claims *models.GoogleClaims, ctx context.Context) (*User, *apierror.APIError, int) {
 	var apiErr *apierror.APIError
 	var statusCode int
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	email, ok := p.Claims["email"].(string)
-	if !ok {
+	if claims.Email == "" {
 		apiErr = apierror.Build(apierror.BadRequestCode, "email is missing", apierror.WithTarget("email"))
 		statusCode = http.StatusBadRequest
 		return nil, apiErr, statusCode
 	}
 
-	name, ok := p.Claims["name"].(string)
-	if !ok {
-		apiErr = apierror.Build(apierror.BadRequestCode, "name is missing", apierror.WithTarget("email"))
+	if claims.Name == "" {
+		apiErr = apierror.Build(apierror.BadRequestCode, "name is missing", apierror.WithTarget("name"))
 		statusCode = http.StatusBadRequest
 		return nil, apiErr, statusCode
 	}
 
-	pic, ok := p.Claims["picture"].(string)
-	if !ok || pic == "" {
-		pic = ""
-	} else {
+	if claims.Picture != "" {
 		// Change 96px to 256px for better quality
-		pic = strings.Replace(pic, "=s96-c", "=s256-c", 1)
+		claims.Picture = strings.Replace(claims.Picture, "=s96-c", "=s256-c", 1)
 	}
 
 	provider := ProviderIdentity{
-		ProviderID: p.Subject,
-		Email:      email,
-		Name:       name,
-		PictureURL: pic,
+		ProviderID: claims.Subject,
+		Email:      claims.Email,
+		Name:       claims.Name,
+		PictureURL: claims.Picture,
 		Provider:   "google",
 	}
 

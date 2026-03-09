@@ -9,17 +9,18 @@ import (
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/config"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/models"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
 	"golang.org/x/oauth2"
-	"google.golang.org/api/idtoken"
 )
 
 type Service interface {
 	GenerateOAuthUrl(verifier string, state string) (url string)
 	GoogleClient() (config *oauth2.Config)
-	HandleToken(p *idtoken.Payload, ctx context.Context) (u *User, a *apierror.APIError, statusCode int)
+	HandleToken(claims *models.GoogleClaims, ctx context.Context) (u *User, a *apierror.APIError, statusCode int)
 	RequiredCookies(r *http.Request) (verifier, state *http.Cookie, err error)
 	FrontChannelError(oauthCode string) (statusCode int, a *apierror.APIError)
 	BackChannelError(err error) (statusCode int, a *apierror.APIError, error error)
@@ -28,6 +29,7 @@ type Service interface {
 
 type TokenService interface {
 	GenerateHttpToken(userId string) (httpToken string, err error)
+	DecodeGoogleToken(jwtToken string, reqContext context.Context) (*models.GoogleClaims, error)
 }
 
 type Handler struct {
@@ -95,6 +97,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
+	const op errors.Op = "handler.RedirectURL"
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
@@ -156,14 +159,33 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := idtoken.Validate(ctx, rawIdToken, h.service.GoogleClient().ClientID)
+	payload, err := h.token.DecodeGoogleToken(rawIdToken, r.Context())
 	if err != nil {
-		log.Error.Println("identity tokne is either valid or expired", err, "idtoken", payload)
+		var errWrapper = errors.B(path, op, "faild to decode google token", err)
+		log.Error.Println(errWrapper)
+		var apiErr *apierror.APIError
+		var statusCode int
+		switch {
+		case errors.Is(err, errors.Client):
+			apiErr = apierror.Build(apierror.BadRequestCode, "the identity token is invalid",
+				apierror.WithTarget("google token"),
+				apierror.WithInnerError("InvalidOrExpiredIdentityToken"))
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, errors.TimeOut):
+			apiErr = apierror.TimeOutError("google token")
+			statusCode = http.StatusGatewayTimeout
 
-		apiErr := apierror.Build(apierror.BadRequestCode, "the identity token is invalid",
-			apierror.WithTarget("idtoken"),
-			apierror.WithInnerError("InvalidOrExpiredIdentityToken"))
-		apiresponse.Send(w, http.StatusBadRequest, apiErr)
+		case errors.Is(err, errors.NotFound):
+			apiErr = apierror.Build(apierror.NotFoundRequestCode, "no token was found", apierror.WithTarget("google token"))
+			statusCode = http.StatusNotFound
+
+		case errors.Is(err, errors.Internal):
+			apiErr = apierror.Build(apierror.NotFoundRequestCode, "unexpected error", apierror.WithTarget("google token"))
+			statusCode = http.StatusInternalServerError
+		default:
+			return
+		}
+		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
 

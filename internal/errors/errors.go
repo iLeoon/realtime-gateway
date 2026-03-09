@@ -164,6 +164,13 @@ func Is[T any](err error, target T) bool {
 				e = customErr.Err // unwrapping our struct
 			} else if u, ok := e.(interface{ Unwrap() error }); ok {
 				e = u.Unwrap() // unwrapping standard errors
+			} else if u, ok := e.(interface{ Unwrap() []error }); ok {
+				for _, unwrapped := range u.Unwrap() {
+					if Is(unwrapped, target) {
+						return true
+					}
+				}
+				break
 			} else {
 				break
 			}
@@ -197,6 +204,13 @@ func Is[T any](err error, target T) bool {
 				e = customErr.Err
 			} else if u, ok := e.(interface{ Unwrap() error }); ok {
 				e = u.Unwrap()
+			} else if u, ok := e.(interface{ Unwrap() []error }); ok {
+				for _, unwrapped := range u.Unwrap() {
+					if Is(unwrapped, target) {
+						return true
+					}
+				}
+				break
 			} else {
 				break
 			}
