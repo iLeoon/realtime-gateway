@@ -104,7 +104,7 @@ func (c *client) readPump() {
 }
 
 func (c *client) writePump() {
-	const op errors.Op = "client.writePumo"
+	const op errors.Op = "client.writePump"
 
 	wsCode := websocket.CloseGoingAway
 	reason := "connection is closing"
@@ -119,12 +119,11 @@ func (c *client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			if err := c.writeSocketMessage(message); err != nil {
-				log.Error.Println(wrapErr, "failed to write the message to the socket", err)
-			}
-
 			if !ok {
 				return
+			}
+			if err := c.writeSocketMessage(message); err != nil {
+				log.Error.Println(wrapErr, "failed to write the message to the socket", err)
 			}
 
 		case <-ticker.C:
@@ -202,9 +201,10 @@ func (c *client) Enqueue(message []byte) {
 func (c *client) Terminate(code int, reason string, op errors.Op) {
 	c.once.Do(func() {
 		c.server.removeClient(c)
+		_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 		if err := c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason)); err != nil {
 			wrapErr := errors.B(clientPath, op, err)
-			log.Error.Printf("failed to send close message to client %s: %v", c.connectionID, wrapErr)
+			log.Error.Printf("failed to send close message to client %d: %v", c.connectionID, wrapErr)
 		}
 		c.conn.Close()
 		close(c.send)
