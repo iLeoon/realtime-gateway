@@ -127,7 +127,9 @@ func (s *service) DecodeGoogleToken(jwtToken string, ctx context.Context) (*mode
 // getGooglePublicKey returns the RSA public key for the given key ID.
 func (s *service) getGooglePublicKey(ctx context.Context) (map[string]*rsa.PublicKey, error) {
 	const op errors.Op = "service.getGooglePublicKey"
-
+	var googleHttpClient = &http.Client{
+		Timeout: 5 * time.Second,
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/oauth2/v1/certs", nil)
 	if err != nil {
 		switch {
@@ -140,7 +142,7 @@ func (s *service) getGooglePublicKey(ctx context.Context) (map[string]*rsa.Publi
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := googleHttpClient.Do(req)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):

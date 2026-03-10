@@ -80,7 +80,10 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		},
 	}
 	var b [4]byte
-	rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		log.Error.Println(path, errors.Op("server.start"), err)
+		return
+	}
 	connectionID := binary.LittleEndian.Uint32(b[:])
 
 	userID, ok := ctx.UserID(r.Context())
