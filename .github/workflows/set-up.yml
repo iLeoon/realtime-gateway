@@ -26,4 +26,4 @@ jobs:
         run: go test -v -race ./...
 
       - name: Build the Binary
-        run: go build -o chatserver main.go
+        run: go build -o chatserver ./cmd/server/
