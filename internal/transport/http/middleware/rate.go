@@ -3,7 +3,6 @@ package middleware
 // It is inspired by the rate limiter implementation in the Upspin project.
 // See: github.com/upspin/upspin
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -129,7 +128,6 @@ func (r *rateLimiter) rateCleaner(now time.Time) {
 
 func RateLimiter(next http.Handler, rl *rateLimiter) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(rl.m)
 		ok, retryAfter := rl.pass(time.Now(), getKey(r))
 		if !ok {
 			w.Header().Set("Retry-After", retryAfter.String())
