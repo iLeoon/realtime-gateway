@@ -6,12 +6,53 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/iLeoon/realtime-gateway/internal/errors"
+	"github.com/iLeoon/realtime-gateway/internal/protocol"
+	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 )
 
-const tcpAddr = "localhost:8080"
+// startTestServer spins up a minimal TCP listener that mirrors the real
+// server's behaviour: it decodes one frame per connection and writes back
+// an ErrorPacket on any client-side decode error.
+func startTestServer(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to start test server: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return // listener closed
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(3 * time.Second))
+
+				_, decodeErr := protocol.DecodeFrame(c)
+				if decodeErr != nil && errors.Is(decodeErr, errors.Client) {
+					pkt := &packets.ErrorPacket{
+						Code:    errors.Client,
+						Message: "invalid packet",
+					}
+					frame := protocol.ConstructFrame(pkt)
+					frame.EncodeFrame(c)
+				}
+			}(conn)
+		}
+	}()
+
+	return ln.Addr().String()
+}
 
 func TestCorruptFrame(t *testing.T) {
-	conn, err := net.DialTimeout("tcp", tcpAddr, 2*time.Second)
+	addr := startTestServer(t)
+
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
 		t.Fatalf("could not connect: %v", err)
 	}
@@ -40,8 +81,8 @@ func TestCorruptFrame(t *testing.T) {
 	if raw[0] != 0x89 {
 		t.Fatalf("response magic mismatch: got 0x%02x", raw[0])
 	}
-	if raw[1] != 8 { // ERROR opcode = 8
-		t.Fatalf("expected ERROR opcode (8), got %d", raw[1])
+	if raw[1] != packets.Error {
+		t.Fatalf("expected ERROR opcode (%d), got %d", packets.Error, raw[1])
 	}
 	length := binary.BigEndian.Uint32(raw[2:6])
 	code := raw[6]
