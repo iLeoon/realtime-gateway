@@ -19,16 +19,17 @@ const (
 // Frame represents a binary protocol message exchanged between
 // The WebSocket gateway and the TCP engine.
 // // Structure:
-//   +---------+--------------+------------
-//   | Magic| Opcode| Length| Payload     |
-//   +---------+--------------+------------
-// The frame struct consists of
+//
+//	+---------+--------------+------------
+//	| Magic| Opcode| Length| Payload     |
+//	+---------+--------------+------------
+//
+// # The frame struct consists of
 //
 // Magic:   1 byte   - protocol identifier
 // Opcode:  1 byte   - protocol type
 // Length:  4 bytes  - payload length
 // Payload: M bytes  - actual user/application data
-
 // It encapsulates both the fixed-size frame header and the variable-length payload
 type Frame struct {
 	Header  FrameHeader
@@ -76,7 +77,7 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 	// Compute length.
 	sizeOfPayload := len(payloadSlice)
 
-	if sizeOfPayload == 0 && f.Header.Opcode != packets.PING && f.Header.Opcode != packets.PONG {
+	if sizeOfPayload == 0 && f.Header.Opcode != packets.Ping && f.Header.Opcode != packets.Pong {
 		return errors.B(path, op, errors.Internal, "trying to encode an empty payload")
 	}
 
@@ -115,6 +116,8 @@ func (f *Frame) EncodeFrame(w io.Writer) error {
 //
 // After parsing the header and payload, DecodeFrame returns a fully
 // populated Frame struct containing both the header and the payload.
+//
+//nolint:gocyclo
 func DecodeFrame(r io.Reader) (*Frame, error) {
 	const op errors.Op = "frame.DecodeFrame"
 	// We know the header length is 6 bytes.
@@ -153,11 +156,11 @@ func DecodeFrame(r io.Reader) (*Frame, error) {
 		return nil, errors.B(path, op, errors.Client, "the payload hit the maximum size")
 	}
 
-	if payloadLength == 0 && opcode != packets.PING && opcode != packets.PONG {
+	if payloadLength == 0 && opcode != packets.Ping && opcode != packets.Pong {
 		return nil, errors.B(path, op, errors.Client, "trying to decode an empty payload")
 	}
 
-	if (opcode == packets.PING || opcode == packets.PONG) && payloadLength > 0 {
+	if (opcode == packets.Ping || opcode == packets.Pong) && payloadLength > 0 {
 		return nil, errors.B(path, op, errors.Client, "health packets size can't be > 0")
 	}
 

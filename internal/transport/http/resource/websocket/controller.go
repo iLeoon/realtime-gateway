@@ -10,7 +10,7 @@ import (
 )
 
 type Service interface {
-	GenerateWsToken(userId string) (wsToken string, err error)
+	GenerateWsToken(userID string) (wsToken string, err error)
 }
 
 type Handler struct {
@@ -31,13 +31,13 @@ func (h *Handler) RegsiterRoutes() *http.ServeMux {
 }
 
 func (h *Handler) GenerateTicket(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	jwtToken, err := h.service.GenerateWsToken(authenticatedId)
+	jwtToken, err := h.service.GenerateWsToken(authenticatedID)
 	if err != nil {
 		log.Error.Println("error on generating the websocket ticket", err)
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToGenerateToken("GeneratingWsJwtTokenFailed"))

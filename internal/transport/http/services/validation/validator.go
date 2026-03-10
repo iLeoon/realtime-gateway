@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 )
 
@@ -30,17 +31,23 @@ func Init(validator *validator.Validate) {
 	})
 }
 
-func Validate(data interface{}) []apierror.ErrorDetails {
+func Validate(data interface{}) ([]apierror.ErrorDetails, error) {
+	const path errors.PathName = "validation/validator"
+	const op errors.Op = "validate"
 	err := v.Struct(data)
 	if err == nil {
-		return nil
+		return nil, errors.B(path, op, "failed to validate struct field", err)
 	}
-	errors := err.(validator.ValidationErrors)
-	errDetails := buildErrValidationMessage(errors, data)
-	return errDetails
+	errs, ok := err.(validator.ValidationErrors)
+	if !ok {
+		return nil, errors.B(path, op, "error passed is a validation error")
+
+	}
+	errDetails := buildErrValidationMessage(errs)
+	return errDetails, nil
 }
 
-func buildErrValidationMessage(ves validator.ValidationErrors, data interface{}) []apierror.ErrorDetails {
+func buildErrValidationMessage(ves validator.ValidationErrors) []apierror.ErrorDetails {
 	apiErr := make([]apierror.ErrorDetails, 0, len(ves))
 	for _, ve := range ves {
 		msg := setValidationMessageOps(&options{
@@ -64,7 +71,7 @@ func setValidationMessageOps(o *options) codeMessage {
 	case "required":
 		return codeMessage{
 			code:    "RequiredField",
-			message: fmt.Sprintf("%s is a required field: can't be ommitted or empty", o.fieldName),
+			message: fmt.Sprintf("%s is a required field: can't be omitted or empty", o.fieldName),
 		}
 	case "gt":
 		return codeMessage{

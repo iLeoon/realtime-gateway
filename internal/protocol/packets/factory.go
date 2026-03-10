@@ -12,33 +12,33 @@ func ConstructPacket(ope uint8) (BuildPayload, error) {
 	const path errors.PathName = "protocol/packets/factor"
 	const op errors.Op = "packets.ConstructPacket"
 	switch ope {
-	case SEND_MESSAGE:
+	case SendMessage:
 		return &SendMessagePacket{}, nil
-	case RESPONSE_MESSAGE:
+	case ResponseMessage:
 		return &ResponseMessagePacket{}, nil
-	case CONNECT:
+	case Connect:
 		return &ConnectPacket{}, nil
-	case DISCONNECT:
+	case Disconnect:
 		return &DisconnectPacket{}, nil
-	case PING:
+	case Ping:
 		return &PingPacket{}, nil
-	case PONG:
+	case Pong:
 		return &PongPacket{}, nil
-	case UPDATE_MESSAGE:
+	case UpdateMessage:
 		return &UpdateMessagePacket{}, nil
-	case UPDATE_RESPONSE:
+	case UpdateResponse:
 		return &ResponseUpdateMessagePacket{}, nil
-	case DELETE_MESSAGE:
+	case DeleteMessage:
 		return &DeleteMessagePacket{}, nil
-	case DELETE_RESPONSE:
+	case DeleteResponse:
 		return &ResponseDeleteMessagePacket{}, nil
-	case ERROR:
+	case Error:
 		return &ErrorPacket{}, nil
-	case TYPING:
+	case Typing:
 		return &TypingPacket{}, nil
-	case TYPING_RESPONSE:
+	case TypingResponse:
 		return &ResponseTypingPacket{}, nil
-	case PRESENCE_RESPONSE:
+	case PresenceResponse:
 		return &ResponsePresencePacket{}, nil
 	}
 

@@ -17,7 +17,7 @@ func (e *ErrorPacket) String() string {
 }
 
 func (e *ErrorPacket) Type() uint8 {
-	return ERROR
+	return Error
 }
 
 func (e *ErrorPacket) Encode() ([]byte, error) {

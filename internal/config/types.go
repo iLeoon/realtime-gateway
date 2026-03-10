@@ -2,7 +2,7 @@ package config
 
 type Config struct {
 	TCP
-	HttpServer
+	HTTPServer
 	GoogleOAuth
 	PostgreSQL
 	JWT
@@ -10,11 +10,11 @@ type Config struct {
 }
 
 type TCP struct {
-	TcpPort string `env:"TCP_SERVER_PORT,required"`
+	TCPPort string `env:"TCP_SERVER_PORT,required"`
 }
 
-type HttpServer struct {
-	HttpPort string `env:"HTTP_PORT,required"`
+type HTTPServer struct {
+	HTTPPort string `env:"HTTP_PORT,required"`
 }
 
 type GoogleOAuth struct {

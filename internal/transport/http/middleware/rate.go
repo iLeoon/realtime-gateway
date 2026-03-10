@@ -1,6 +1,5 @@
 package middleware
 
-
 // It is inspired by the rate limiter implementation in the Upspin project.
 // See: github.com/upspin/upspin
 import (
@@ -50,7 +49,7 @@ func (r *rateLimiter) pass(now time.Time, key string) (bool, time.Duration) {
 
 	req, ok := r.m[key]
 	if !ok {
-		var req = &request{
+		req = &request{
 			ipAdd:   key,
 			seen:    now,
 			backoff: r.backoff,
@@ -103,9 +102,13 @@ func (r *rateLimiter) pass(now time.Time, key string) (bool, time.Duration) {
 			req.next = nil
 			r.last = req
 		}
-
 	}
 
+	r.rateCleaner(now)
+	return true, 0
+}
+
+func (r *rateLimiter) rateCleaner(now time.Time) {
 	cut := 0
 	if len(r.m) > maxEntries {
 		cut = len(r.m) - maxEntries
@@ -122,8 +125,6 @@ func (r *rateLimiter) pass(now time.Time, key string) (bool, time.Duration) {
 			req.next.prev = nil
 		}
 	}
-
-	return true, 0
 }
 
 func RateLimiter(next http.Handler, rl *rateLimiter) http.Handler {
@@ -154,14 +155,4 @@ func getKey(r *http.Request) string {
 		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
 	return ip + r.URL.Path
-}
-
-func getIP(r *http.Request) string {
-	forwarded := r.Header.Get("X-Forwarded-For")
-	if forwarded != "" {
-		ips := strings.Split(forwarded, ",")
-		return strings.TrimSpace(ips[0])
-	}
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return ip
 }

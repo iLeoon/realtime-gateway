@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const path errors.PathName = "worker/pool"
+
 type TaskType int8
 
 const (
@@ -41,31 +43,27 @@ func worker(db *pgxpool.Pool, done <-chan struct{}, messagesCh <-chan Message) {
 			if !ok {
 				return
 			}
-			switch m.Task {
-			case Insert:
-				if err := store(db, m); err != nil {
-					log.Error.Printf("failed to persist message: %v", err)
-				}
-
-			case Update:
-				if err := update(db, m); err != nil {
-					log.Error.Printf("failed to update message: %v", err)
-				}
-
-			case Delete:
-				if err := delete(db, m); err != nil {
-					log.Error.Printf("failed to delete message: %v", err)
-				}
-			}
-
+			handleTask(m.Task, db, m)
 		case <-done:
 			return
 		}
 	}
 }
 
+func handleTask(task TaskType, db *pgxpool.Pool, message Message) {
+	var err error
+	switch task {
+	case Insert:
+		err = store(db, message)
+	case Update:
+		err = update(db, message)
+	case Delete:
+		err = delete(db, message)
+	}
+	log.Error.Printf("failed to process %v message: %v", message, err)
+}
+
 func store(db *pgxpool.Pool, m Message) error {
-	const path errors.PathName = "worker/pool"
 	const op errors.Op = "worker.store"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -77,26 +75,12 @@ func store(db *pgxpool.Pool, m Message) error {
 		m.ID, m.AuthorID, m.ConversationID, m.Content,
 	)
 	if err != nil {
-		switch e := err.(type) {
-		case *pgconn.PgError:
-			switch e.Code {
-			case "08006", "08001", "08003":
-				return errors.B(path, op, errors.Network, err)
-			case "53300":
-				return errors.B(path, op, errors.ServiceUnavailable, err)
-			case "57014":
-				return errors.B(path, op, errors.TimeOut, err)
-			default:
-				return errors.B(path, op, errors.Internal, err)
-			}
-		}
-		return errors.B(path, op, errors.Internal, err)
+		return handleDBError(err, op)
 	}
 	return nil
 }
 
 func update(db *pgxpool.Pool, m Message) error {
-	const path errors.PathName = "worker/pool"
 	const op errors.Op = "worker.update"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -107,20 +91,7 @@ func update(db *pgxpool.Pool, m Message) error {
 		`,
 		m.Content, m.UpdatedAt, m.ID, m.ConversationID)
 	if err != nil {
-		switch e := err.(type) {
-		case *pgconn.PgError:
-			switch e.Code {
-			case "08006", "08001", "08003":
-				return errors.B(path, op, errors.Network, err)
-			case "53300":
-				return errors.B(path, op, errors.ServiceUnavailable, err)
-			case "57014":
-				return errors.B(path, op, errors.TimeOut, err)
-			default:
-				return errors.B(path, op, errors.Internal, err)
-			}
-		}
-		return errors.B(path, op, errors.Internal, err)
+		return handleDBError(err, op)
 	}
 
 	if tx.RowsAffected() == 0 {
@@ -131,7 +102,6 @@ func update(db *pgxpool.Pool, m Message) error {
 }
 
 func delete(db *pgxpool.Pool, m Message) error {
-	const path errors.PathName = "worker/pool"
 	const op errors.Op = "worker.delete"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -142,20 +112,7 @@ func delete(db *pgxpool.Pool, m Message) error {
 		`,
 		m.ID, m.ConversationID)
 	if err != nil {
-		switch e := err.(type) {
-		case *pgconn.PgError:
-			switch e.Code {
-			case "08006", "08001", "08003":
-				return errors.B(path, op, errors.Network, err)
-			case "53300":
-				return errors.B(path, op, errors.ServiceUnavailable, err)
-			case "57014":
-				return errors.B(path, op, errors.TimeOut, err)
-			default:
-				return errors.B(path, op, errors.Internal, err)
-			}
-		}
-		return errors.B(path, op, errors.Internal, err)
+		return handleDBError(err, op)
 	}
 
 	if tx.RowsAffected() == 0 {
@@ -163,4 +120,21 @@ func delete(db *pgxpool.Pool, m Message) error {
 	}
 
 	return nil
+}
+
+func handleDBError(err error, op errors.Op) error {
+	switch e := err.(type) {
+	case *pgconn.PgError:
+		switch e.Code {
+		case "08006", "08001", "08003":
+			return errors.B(path, op, errors.Network, err)
+		case "53300":
+			return errors.B(path, op, errors.ServiceUnavailable, err)
+		case "57014":
+			return errors.B(path, op, errors.TimeOut, err)
+		default:
+			return errors.B(path, op, errors.Internal, err)
+		}
+	}
+	return errors.B(path, op, errors.Internal, err)
 }

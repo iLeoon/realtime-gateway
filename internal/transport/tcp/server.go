@@ -18,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const path errors.PathName = "tcp/server"
+
 // server represents the central processing engine of the system. It is
 // responsible for managing active WebSocket clients, receiving packets from
 // the gateway, applying server-side logic, and routing messages to the
@@ -29,6 +31,7 @@ type server struct {
 	clients           map[uint32][]uint32            // userID        → []connectionID
 	userConversations map[uint32]map[uint32]struct{} // userID        → set of conversationIDs
 	roomManager       map[uint32]map[uint32]struct{} // conversationID → set of memberIDs
+	userID            uint32
 	ready             chan<- struct{}
 	mu                sync.RWMutex
 	messagesCh        chan worker.Message
@@ -48,7 +51,7 @@ type FanOut struct {
 	userID       uint32
 }
 
-// Create a new instance of the TCP server.
+// Start starts a new instance of the TCP server.
 func Start(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) {
 	server := &server{
 		conf:              c,
@@ -69,9 +72,9 @@ func Start(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) {
 // Lanunches the server, this method must be invoked inside a separate
 // goroutine because it blocks while listening for incoming packets.
 func (s *server) listen() {
-	listner, err := net.Listen("tcp", s.conf.TcpPort)
+	listner, err := net.Listen("tcp", s.conf.TCPPort)
 	if err != nil {
-		log.Error.Fatal("an error occured on creating tcp server", err)
+		log.Error.Fatal("an error occurred on creating tcp server", err)
 		os.Exit(1)
 	}
 	log.Info.Println("TCP server is up and running...")
@@ -97,9 +100,7 @@ func (s *server) listen() {
 // It uses type assertion to convert the generic BuildPayload
 // its concrete SendMessagePacket type.
 func (s *server) handleConn(conn net.Conn) {
-	var userID uint32
 	const op errors.Op = "server.handleConn"
-	const path errors.PathName = "tcp/server"
 	stopPing := make(chan struct{})
 	defer func() {
 		close(stopPing)
@@ -118,94 +119,98 @@ func (s *server) handleConn(conn net.Conn) {
 		// the incoming raw bytes and return the actual human-readable frame.
 		frame, err := protocol.DecodeFrame(conn)
 		if err != nil {
-			// Error that gives context to the rest of the logs
-			wrappedErr := errors.B(path, op, err)
-			switch {
-			case errors.Is(err, io.EOF):
-				log.Info.Println("tcp connection is closed by peer(gateway)", wrappedErr)
-				return
-			case errors.Is(err, net.ErrClosed):
-				log.Info.Println("connection is already terminated", err)
-				return
-			case errors.Is(err, os.ErrDeadlineExceeded):
-				log.Info.Println("read deadline exceeded, closing connection", wrappedErr)
-				return
-			case errors.Is(err, errors.Client):
-				if err := s.writePacket(&packets.ErrorPacket{
-					Code:    errors.Client,
-					Message: "invalid packet",
-				}, conn); err != nil {
-					log.Error.Println("failed to write the error packet to the gateway", err)
-					return
-				}
-				return
-			default:
-				log.Error.Println("unexpected error while tcp server reading packets", wrappedErr)
-				return
-			}
+			readErr := s.handleDecodeErr(err, op, conn)
+			// wrappedErr gives more context to the rest of the logs
+			wrappedErr := errors.B(path, op, readErr, err)
+			log.Error.Println(wrappedErr)
 		}
 
-		// Route the frame to it's appropriate handler.
+		// packtDispatcher routes the frame to it's appropriate handler.
 		// uses a type assertion to convert the generic BuildPayload interface into
 		// its concrete *packet type
-		switch p := frame.Payload.(type) {
-		case *packets.ConnectPacket:
-			userID = p.UserID
-			err := s.register(p, conn)
-			if err != nil {
-				log.Error.Println("proccessing connect packet failed", err)
-				s.handlePacketError(err, conn)
-				return
-			}
-		case *packets.DisconnectPacket:
-			log.Info.Println("Decode packet", "packet", p.String())
-			s.unregister(p, conn)
-			return
-		case *packets.SendMessagePacket:
-			err := s.handleSendMessageReq(p, userID)
-			if err != nil {
-				log.Error.Println("processing send message packet", err)
-				s.handlePacketError(err, conn)
-				return
-			}
-		case *packets.PongPacket:
-			// We don't do anything we just renter the loop.
-		case *packets.UpdateMessagePacket:
-			err := s.handleUpdateMessagePacket(p, userID)
-			if err != nil {
-				log.Error.Println("processing update message packet failed", err)
-				s.handlePacketError(err, conn)
-				return
-			}
-		case *packets.DeleteMessagePacket:
-			err := s.handleDeleteMessagePacket(p, userID)
-			if err != nil {
-				log.Error.Println("processing update message packet failed", err)
-				s.handlePacketError(err, conn)
-				return
-			}
-
-		case *packets.TypingPacket:
-			err := s.handleTypingPacket(p, userID)
-			if err != nil {
-				log.Error.Println("processing typing packet failed", err)
-				s.handlePacketError(err, conn)
-				return
-			}
-		default:
-			log.Error.Printf("invalid packet type from gateway: %T", p)
-			return
-
-		}
-		log.Info.Println("Decode packet", "packet", frame.Payload.String())
+		s.packetsDispatcher(frame, conn)
 	}
 }
 
+func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn) {
+	switch p := frame.Payload.(type) {
+	case *packets.ConnectPacket:
+		s.userID = p.UserID
+		err := s.register(p, conn)
+		if err != nil {
+			log.Error.Println("processing connect packet failed", err)
+			s.handleErrorPacket(err, conn)
+			return
+		}
+	case *packets.DisconnectPacket:
+		log.Info.Println("Decode packet", "packet", p.String())
+		s.unregister(p)
+		return
+
+	case *packets.SendMessagePacket:
+		err := s.handleSendMessageReq(p, s.userID)
+		if err != nil {
+			log.Error.Println("processing send message packet", err)
+			s.handleErrorPacket(err, conn)
+			return
+		}
+	case *packets.PongPacket:
+		// We don't do anything we just renter the loop.
+	case *packets.UpdateMessagePacket:
+		err := s.handleUpdateMessagePacket(p, s.userID)
+		if err != nil {
+			log.Error.Println("processing update message packet failed", err)
+			s.handleErrorPacket(err, conn)
+			return
+		}
+	case *packets.DeleteMessagePacket:
+		err := s.handleDeleteMessagePacket(p, s.userID)
+		if err != nil {
+			log.Error.Println("processing update message packet failed", err)
+			s.handleErrorPacket(err, conn)
+			return
+		}
+
+	case *packets.TypingPacket:
+		err := s.handleTypingPacket(p, s.userID)
+		if err != nil {
+			log.Error.Println("processing typing packet failed", err)
+			s.handleErrorPacket(err, conn)
+			return
+		}
+	default:
+		log.Error.Printf("invalid packet type from gateway: %T", p)
+		return
+	}
+	log.Info.Println("Decode packet", "packet", frame.Payload.String())
+}
+
+func (s *server) handleDecodeErr(err error, op errors.Op, conn net.Conn) error {
+	var readErr error
+	switch {
+	case errors.Is(err, io.EOF):
+		readErr = errors.B(path, op, "tcp connection is closed by peer(gateway)")
+	case errors.Is(err, net.ErrClosed):
+		readErr = errors.B(path, op, "connection is already terminated")
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		readErr = errors.B(path, op, "read deadline exceeded, closing connection")
+	case errors.Is(err, errors.Client):
+		if err := s.writePacket(&packets.ErrorPacket{
+			Code:    errors.Client,
+			Message: "invalid packet",
+		}, conn); err != nil {
+			readErr = errors.B(path, op, "failed to write the error packet to the gateway", err)
+		}
+	default:
+		readErr = errors.B(path, op, "unexpected error while tcp server reading packets")
+	}
+	return readErr
+}
+
 func (s *server) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.writePacket"
 	if err := conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
-		return errors.B(path, op, "connection is unhealty", err, errors.Network)
+		return errors.B(path, op, "connection is unhealthy", err, errors.Network)
 	}
 
 	// Construct the frame, encode it, and then send it to the TCP client.
@@ -221,7 +226,6 @@ func (s *server) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
 // it fans-out the messages to all the participants in a single conversation
 // wether it was direct or group conversation.
 func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uint32) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.handleSendMessageReq"
 
 	if userID == 0 {
@@ -291,7 +295,6 @@ func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uin
 
 // handleUpdateMessagePacket is responsible for updating a message
 func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, userID uint32) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.handleUpdateMessagePacket"
 
 	if userID == 0 {
@@ -323,7 +326,7 @@ func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, use
 		resPkt := &packets.ResponseUpdateMessagePacket{
 			MessageID:      pkt.MessageID,
 			ConversationID: pkt.ConversationID,
-			Updated_at:     now,
+			UpdatedAt:      now,
 			ResContent:     pkt.Content,
 		}
 		if err := s.writePacket(resPkt, item.rawConn); err != nil {
@@ -343,9 +346,8 @@ func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, use
 	return nil
 }
 
-// handleUpdateMessagePacket is responsible for deleteing a message
+// handleUpdateMessagePacket is responsible for deleting a message
 func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, userID uint32) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.handleDeleteMessagePacket"
 
 	if userID == 0 {
@@ -396,7 +398,6 @@ func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, use
 // handleTypingPacket fans out a typing indicator to all online members of
 // the conversation.
 func (s *server) handleTypingPacket(pkt *packets.TypingPacket, userID uint32) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.handleTypingPacket"
 
 	if userID == 0 {
@@ -448,7 +449,6 @@ func (s *server) isAllowed(userID uint32, conversationID uint32) bool {
 }
 
 func (s *server) pingReq(conn net.Conn, stop <-chan struct{}) {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.pingReq"
 	ticker := time.NewTicker(pingTime)
 	pkt := &packets.PingPacket{}
@@ -473,7 +473,6 @@ func (s *server) pingReq(conn net.Conn, stop <-chan struct{}) {
 
 // registerConnectionIDs add a connecteionIDs and userIDs to their maps.
 func (s *server) register(pkt *packets.ConnectPacket, conn net.Conn) error {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.register"
 
 	memberships, err := s.fetchMemberships(pkt.UserID)
@@ -511,11 +510,19 @@ func (s *server) register(pkt *packets.ConnectPacket, conn net.Conn) error {
 
 	// Collect presence targets while still under write lock.
 	// Only fan-out online on the first connection for this user.
+	var onlineTargets = s.collectOnlineUsers(pkt.UserID)
+	s.mu.Unlock()
+
+	s.updatePresene(onlineTargets, pkt.UserID, true)
+	return nil
+}
+
+func (s *server) collectOnlineUsers(userID uint32) []net.Conn {
 	var onlineTargets []net.Conn
-	if len(s.clients[pkt.UserID]) == 1 {
-		for convID := range s.userConversations[pkt.UserID] {
+	if len(s.clients[userID]) == 1 {
+		for convID := range s.userConversations[userID] {
 			for memberID := range s.roomManager[convID] {
-				if memberID == pkt.UserID {
+				if memberID == userID {
 					continue
 				}
 				for _, connID := range s.clients[memberID] {
@@ -524,24 +531,11 @@ func (s *server) register(pkt *packets.ConnectPacket, conn net.Conn) error {
 			}
 		}
 	}
-	s.mu.Unlock()
-
-	if len(onlineTargets) > 0 {
-		resPkt := &packets.ResponsePresencePacket{UserID: pkt.UserID, IsOnline: true}
-		log.Info.Println("Decode packet", "packet", resPkt.String())
-
-		for _, conn := range onlineTargets {
-			if err := s.writePacket(resPkt, conn); err != nil {
-				log.Error.Printf("failed to send online presence for userID %d: %v", pkt.UserID, err)
-			}
-		}
-	}
-
-	return nil
+	return onlineTargets
 }
 
 // unRegisterConnectionIDs removes the connectionIDs and userIDs from the map
-func (s *server) unregister(pkt *packets.DisconnectPacket, conn net.Conn) {
+func (s *server) unregister(pkt *packets.DisconnectPacket) {
 	s.mu.Lock()
 
 	delete(s.connections, pkt.ConnectionID)
@@ -556,39 +550,48 @@ func (s *server) unregister(pkt *packets.DisconnectPacket, conn net.Conn) {
 
 	var offlineTargets []net.Conn
 	if len(filtered) == 0 {
-		// Last connection for this user — collect presence targets before cleanup.
-		for convID := range s.userConversations[pkt.UserID] {
-			for memberID := range s.roomManager[convID] {
-				if memberID == pkt.UserID {
-					continue
-				}
-				for _, connID := range s.clients[memberID] {
-					offlineTargets = append(offlineTargets, s.connections[connID])
-				}
-			}
-		}
-
-		delete(s.clients, pkt.UserID)
-		for convID := range s.userConversations[pkt.UserID] {
-			delete(s.roomManager[convID], pkt.UserID)
-			if len(s.roomManager[convID]) == 0 {
-				delete(s.roomManager, convID)
-			}
-		}
-		delete(s.userConversations, pkt.UserID)
+		offlineTargets = s.removeAndCollectOfflineUsers(pkt.UserID)
 	} else {
 		s.clients[pkt.UserID] = filtered
 	}
 
 	s.mu.Unlock()
+	s.updatePresene(offlineTargets, pkt.UserID, false)
 
-	if len(offlineTargets) > 0 {
-		resPkt := &packets.ResponsePresencePacket{UserID: pkt.UserID, IsOnline: false}
+}
+
+func (s *server) removeAndCollectOfflineUsers(userID uint32) []net.Conn {
+	// Last connection for this user — collect presence targets before cleanup.
+	var offlineTargets []net.Conn
+	for convID := range s.userConversations[userID] {
+		for memberID := range s.roomManager[convID] {
+			if memberID == userID {
+				continue
+			}
+			for _, connID := range s.clients[memberID] {
+				offlineTargets = append(offlineTargets, s.connections[connID])
+			}
+		}
+	}
+	delete(s.clients, userID)
+	for convID := range s.userConversations[userID] {
+		delete(s.roomManager[convID], userID)
+		if len(s.roomManager[convID]) == 0 {
+			delete(s.roomManager, convID)
+		}
+	}
+	delete(s.userConversations, userID)
+	return offlineTargets
+}
+
+func (s *server) updatePresene(targets []net.Conn, userID uint32, isOnline bool) {
+	if len(targets) > 0 {
+		resPkt := &packets.ResponsePresencePacket{UserID: userID, IsOnline: isOnline}
 		log.Info.Println("Decode packet", "packet", resPkt.String())
 
-		for _, conn := range offlineTargets {
+		for _, conn := range targets {
 			if err := s.writePacket(resPkt, conn); err != nil {
-				log.Error.Printf("failed to send offline presence for userID %d: %v", pkt.UserID, err)
+				log.Error.Printf("failed to send presence for userID %d: %v", userID, err)
 			}
 		}
 	}
@@ -596,7 +599,6 @@ func (s *server) unregister(pkt *packets.DisconnectPacket, conn net.Conn) {
 
 func (s *server) batchMessages(message worker.Message) {
 	const op errors.Op = "server.batchMessage"
-	const path errors.PathName = "tcp/server"
 	select {
 	case s.messagesCh <- message:
 	case <-s.done:
@@ -606,7 +608,7 @@ func (s *server) batchMessages(message worker.Message) {
 	}
 }
 
-func (s *server) handlePacketError(err error, conn net.Conn) {
+func (s *server) handleErrorPacket(err error, conn net.Conn) {
 	if errors.Is(err, errors.Client) {
 		errWrite := s.writePacket(&packets.ErrorPacket{
 			Code:    errors.Client,
@@ -623,7 +625,6 @@ func (s *server) handlePacketError(err error, conn net.Conn) {
 // members of those conversations in a single round-trip. Must be called
 // outside the mutex — it performs I/O.
 func (s *server) fetchMemberships(userID uint32) ([]MemberShip, error) {
-	const path errors.PathName = "tcp/server"
 	const op errors.Op = "server.fetchMemberships"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

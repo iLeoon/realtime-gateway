@@ -1,4 +1,5 @@
 package log
+
 // It is inspired by the logger implementation in the Upspin project.
 // See: github.com/upspin/upspin
 import (
@@ -146,20 +147,6 @@ func (l *logger) Fatalf(format string, v ...any) {
 	} else {
 		log.Fatalf(format, v...)
 	}
-}
-
-func toString(level level) string {
-	switch level {
-	case InfoLevel:
-		return "info"
-	case DebugLevel:
-		return "debug"
-	case ErrorLevel:
-		return "error"
-	case DisabledLevel:
-		return "disabled"
-	}
-	return "unknown"
 }
 
 func toLevel(level string) (level, error) {

@@ -89,7 +89,7 @@ func WithInnerError(code string) ErrorOptions {
 	}
 }
 
-func WithInnerErrorDetails(code string, args ...string) ErrorOptions {
+func WithInnerErrorDetails(code string) ErrorOptions {
 	return func(e *APIError) {
 		e.Error.InnerError.InnerError = &InnerErrorDetails{Code: code}
 	}

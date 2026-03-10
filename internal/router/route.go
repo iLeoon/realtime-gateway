@@ -14,14 +14,14 @@ import (
 // messages to their intended recipients.
 
 type Sender interface {
-	Send(userId string, connectionID uint32, message []byte) (err error)
+	Send(userID string, connectionID uint32, message []byte) (err error)
 }
 
 type router struct {
 	router Sender
 }
 
-// Create a new router.
+// New create  a new router instance.
 func New(r Sender) *router {
 	return &router{
 		router: r,
@@ -75,7 +75,7 @@ func (r *router) handleResponseUpdateMessage(pkt *packets.ResponseUpdateMessageP
 	var res = ResponseUpdateMessage{
 		ConversationID: pkt.ConversationID,
 		MessageID:      pkt.MessageID,
-		UpdatedAt:      pkt.Updated_at,
+		UpdatedAt:      pkt.UpdatedAt,
 		Content:        pkt.ResContent,
 	}
 	payload, err := json.Marshal(res)

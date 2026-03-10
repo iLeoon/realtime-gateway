@@ -9,7 +9,7 @@ type ConversationRequest struct {
 }
 
 type ConversationCreatedResponse struct {
-	ConversationId   string    `json:"id"`
+	ConversationID   string    `json:"id"`
 	CreatorID        string    `json:"creatorID"`
 	ConversationType string    `json:"conversationType"`
 	GroupName        *string   `json:"groupName"`
@@ -17,7 +17,7 @@ type ConversationCreatedResponse struct {
 }
 
 type Participant struct {
-	UserId   string    `json:"id"`
+	UserID   string    `json:"id"`
 	UserName string    `json:"displayName"`
 	Email    string    `json:"email"`
 	Image    string    `json:"displayImage"`
@@ -26,7 +26,7 @@ type Participant struct {
 }
 
 type Conversation struct {
-	ConversationId   string        `json:"id"`
+	ConversationID   string        `json:"id"`
 	CreatorID        string        `json:"creatorID"`
 	ConversationType string        `json:"conversationType"`
 	CreatedAt        time.Time     `json:"createdDate"`

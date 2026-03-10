@@ -11,6 +11,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/auth"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/conversation"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/friendrequest"
+	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/health"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/message"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/token"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/user"
@@ -59,11 +60,14 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	wsHandler := websocket.NewHandler(jwtService)
 
+	healthHandler := health.NewHandler(db, conf)
+
 	userMux := userHandler.RegisterRoutes()
 	authMux := authHandler.RegisterRoutes()
 	convMux := convHandler.RegisterRoutes()
 	frMux := frHandler.RegisterRoutes()
 	wsMux := wsHandler.RegsiterRoutes()
+	healthMux := healthHandler.RegisterRoutes()
 
 	rootMux.Handle("/auth/", middleware.RateLimiter(authMux, rl))
 	rootMux.Handle("/users/", middleware.AuthGuard(userMux, jwtService))
@@ -76,10 +80,11 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
+	rootMux.Handle("/health", healthMux)
 
 	// Custom http server configurations
 	server := &http.Server{
-		Addr:              conf.HttpPort,
+		Addr:              conf.HTTPPort,
 		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      0,

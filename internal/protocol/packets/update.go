@@ -17,12 +17,10 @@ func (u *UpdateMessagePacket) String() string {
 	return fmt.Sprintf("UpdateMessagePacket{MessageID: %d, ConversationID: %d, Content: %s}", u.MessageID, u.ConversationID, u.Content)
 }
 func (u *UpdateMessagePacket) Type() uint8 {
-	return UPDATE_MESSAGE
+	return UpdateMessage
 }
 
 func (u *UpdateMessagePacket) Encode() ([]byte, error) {
-	const path errors.PathName = "packets/update_message"
-	const op errors.Op = "UpdateMessagePacket.Encode"
 	b := make([]byte, 8+len(u.Content))
 
 	binary.BigEndian.PutUint32(b[:4], u.MessageID)

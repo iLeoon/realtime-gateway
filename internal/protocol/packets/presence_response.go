@@ -21,7 +21,7 @@ func (r *ResponsePresencePacket) String() string {
 }
 
 func (r *ResponsePresencePacket) Type() uint8 {
-	return PRESENCE_RESPONSE
+	return PresenceResponse
 }
 
 func (r *ResponsePresencePacket) Encode() ([]byte, error) {

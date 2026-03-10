@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Main entry for our pool connection.
+// Connect is the main entry for the pool connection.
 func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 	var psqlInfo string
 

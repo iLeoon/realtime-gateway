@@ -9,7 +9,7 @@ import (
 )
 
 type Repository interface {
-	GetUserById(userId string, ctx context.Context) (user *User, err error)
+	GetUserByID(userID string, ctx context.Context) (user *User, err error)
 	GetFriends(ctx context.Context, userID string) (FriendsList, error)
 	DeleteFriend(ctx context.Context, authenticatedID string, targetID string) error
 }
@@ -51,10 +51,10 @@ func (s *service) GetFriends(ctx context.Context, userID string) (FriendsList, *
 	return fl, nil, 0
 }
 
-func (s *service) GetUser(userId string, ctx context.Context) (*User, *apierror.APIError, int) {
+func (s *service) GetUser(userID string, ctx context.Context) (*User, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	user, err := s.repo.GetUserById(userId, ctx)
+	user, err := s.repo.GetUserByID(userID, ctx)
 	if err != nil {
 		log.Error.Println("retrieve user failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "user")

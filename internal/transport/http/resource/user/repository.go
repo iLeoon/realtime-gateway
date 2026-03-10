@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const path errors.PathName = "user/repository"
+
 type repository struct {
 	db *pgxpool.Pool
 }
@@ -19,8 +21,7 @@ func NewRepo(db *pgxpool.Pool) *repository {
 	}
 }
 
-func (r *repository) GetUserById(userId string, ctx context.Context) (*User, error) {
-	const path errors.PathName = "user/repository"
+func (r *repository) GetUserByID(userID string, ctx context.Context) (*User, error) {
 	const op errors.Op = "repository.GetUserById"
 	var user User
 
@@ -36,8 +37,8 @@ func (r *repository) GetUserById(userId string, ctx context.Context) (*User, err
 	    LIMIT 1
 	`
 
-	err := r.db.QueryRow(ctx, query, userId).Scan(
-		&user.UserId,
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&user.UserID,
 		&user.UserName,
 		&user.Email,
 		&user.Image,
@@ -50,7 +51,6 @@ func (r *repository) GetUserById(userId string, ctx context.Context) (*User, err
 }
 
 func (r *repository) GetFriends(ctx context.Context, userID string) (FriendsList, error) {
-	const path errors.PathName = "user/repository"
 	const op errors.Op = "repository.GetFriends"
 	var fl FriendsList
 
@@ -72,7 +72,7 @@ func (r *repository) GetFriends(ctx context.Context, userID string) (FriendsList
 
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.UserId, &u.UserName, &u.Email, &u.Image); err != nil {
+		if err := rows.Scan(&u.UserID, &u.UserName, &u.Email, &u.Image); err != nil {
 			return fl, apierror.DatabaseErrorClassification(path, op, err)
 		}
 		fl.Value = append(fl.Value, u)
@@ -86,7 +86,6 @@ func (r *repository) GetFriends(ctx context.Context, userID string) (FriendsList
 }
 
 func (r *repository) DeleteFriend(ctx context.Context, authenticatedID string, targetID string) error {
-	const path errors.PathName = "user/repository"
 	const op errors.Op = "repository.DeleteFriend"
 
 	authIDInt, err := strconv.Atoi(authenticatedID)

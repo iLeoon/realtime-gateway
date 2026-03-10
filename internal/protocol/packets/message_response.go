@@ -21,7 +21,7 @@ func (r *ResponseMessagePacket) String() string {
 }
 
 func (r *ResponseMessagePacket) Type() uint8 {
-	return RESPONSE_MESSAGE
+	return ResponseMessage
 }
 
 func (r *ResponseMessagePacket) Encode() ([]byte, error) {

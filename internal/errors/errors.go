@@ -5,6 +5,7 @@ package errors
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 )
 
@@ -39,7 +40,11 @@ func (k Kind) String() string {
 	case Forbidden:
 		return "forbidden"
 	}
-	return "unkown error"
+	return "unknown error"
+}
+
+func (k Kind) Error() string {
+	return fmt.Sprintf("error kind: %v", int(k))
 }
 
 type Error struct {
@@ -51,6 +56,9 @@ type Error struct {
 
 func (e *Error) isZero() bool {
 	return e.Path == "" && e.Op == "" && e.Kind == 0 && e.Err == nil
+}
+func (e *Error) Unwrap() error {
+	return e.Err
 }
 
 type errorString struct {
@@ -146,81 +154,31 @@ func (e *Error) Error() string {
 	return b.String()
 }
 
+func (e *Error) Is(target error) bool {
+	// Case 1: The user passed a Kind (e.g., Is(err, errors.Client))
+	if targetKind, ok := target.(Kind); ok {
+		return e.Kind == targetKind
+	}
+
+	// Case 2: The user passed another *Error struct
+	if targetErr, ok := target.(*Error); ok {
+		if targetErr.Kind != 0 && e.Kind == targetErr.Kind {
+			return true
+		}
+	}
+	// Return false to tell the standard library to keep unwrapping
+	return false
+}
+
 // Is reports whether err matches the target.
 // Target can be a specific error OR a generic Kind.
 func Is[T any](err error, target T) bool {
-	if err == nil {
+	targetErr, ok := any(target).(error)
+	if !ok {
 		return false
 	}
 
-	switch t := any(target).(type) {
-	case Kind:
-		for e := err; e != nil; {
-			// Check if the current error is our custom struct
-			if customErr, ok := e.(*Error); ok {
-				if customErr.Kind == t {
-					return true
-				}
-				e = customErr.Err // unwrapping our struct
-			} else if u, ok := e.(interface{ Unwrap() error }); ok {
-				e = u.Unwrap() // unwrapping standard errors
-			} else if u, ok := e.(interface{ Unwrap() []error }); ok {
-				for _, unwrapped := range u.Unwrap() {
-					if Is(unwrapped, target) {
-						return true
-					}
-				}
-				break
-			} else {
-				break
-			}
-		}
-		return false
-
-	// MODE 2: Target is an ERROR (e.g., Is(err, pgx.ErrNoRows))
-	case error:
-		// If target is nil, we match nil errors
-		if t == nil {
-			return err == nil
-		}
-
-		// Look for Kind match if the target itself is a *Error
-		var targetKind Kind
-		if customTarget, ok := t.(*Error); ok {
-			targetKind = customTarget.Kind
-		}
-
-		for e := err; e != nil; {
-			// 1. Direct equality check
-			if e == t {
-				return true
-			}
-
-			// 2. If both are *Error, compare their Kinds
-			if customErr, ok := e.(*Error); ok {
-				if targetKind != 0 && customErr.Kind == targetKind {
-					return true
-				}
-				e = customErr.Err
-			} else if u, ok := e.(interface{ Unwrap() error }); ok {
-				e = u.Unwrap()
-			} else if u, ok := e.(interface{ Unwrap() []error }); ok {
-				for _, unwrapped := range u.Unwrap() {
-					if Is(unwrapped, target) {
-						return true
-					}
-				}
-				break
-			} else {
-				break
-			}
-		}
-		return false
-
-	default:
-		// If T is neither Kind nor error (e.g., a string), return false
-		return false
-	}
+	return errors.Is(err, targetErr)
 }
 
 // Errorf is equivalent to fmt.Errorf, but allows clients to import only this

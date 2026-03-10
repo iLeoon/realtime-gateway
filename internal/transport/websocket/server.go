@@ -2,8 +2,9 @@ package websocket
 
 import (
 	"container/list"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -16,9 +17,11 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
+const path errors.PathName = "websocket/server"
+
 type Client interface {
 	Enqueue(message []byte)
-	Terminate(code int, reason string)
+	Terminate(code int, reason string, op errors.Op)
 	ConnectionID() uint32
 }
 
@@ -42,7 +45,7 @@ type server struct {
 	reaperCh    chan struct{}
 }
 
-// Create new websocket server
+// New create a new websocket server instance
 func New(c *config.Config) *server {
 	s := &server{
 		clients:    make(map[string][]Client),
@@ -76,8 +79,11 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 			return s.c.FrontEndOrigin == r.Header.Get("Origin")
 		},
 	}
-	connectionID := rand.Uint32()
-	userID, ok := ctx.UserId(r.Context())
+	var b [4]byte
+	rand.Read(b[:])
+	connectionID := binary.LittleEndian.Uint32(b[:])
+
+	userID, ok := ctx.UserID(r.Context())
 
 	if !ok {
 		log.Error.Println("Couldn't extract the ID from the request")
@@ -169,26 +175,25 @@ func (s *server) registerClient(c *client) bool {
 
 // run handles signals from the TCP layer to terminate specific connections.
 func (s *server) run() {
-	for {
-		select {
-		case signal := <-s.signalToWs:
-			s.mu.Lock()
-			clients, ok := s.clients[signal.userID]
-			var target Client
-			if ok {
-				for i := range clients {
-					if clients[i].ConnectionID() == signal.connectionID {
-						target = clients[i]
-						break
-					}
+	const op errors.Op = "server.run"
+	for signal := range s.signalToWs {
+		s.mu.Lock()
+		clients, ok := s.clients[signal.userID]
+		var target Client
+		if ok {
+			for i := range clients {
+				if clients[i].ConnectionID() == signal.connectionID {
+					target = clients[i]
+					break
 				}
 			}
-			s.mu.Unlock()
-			if target != nil {
-				log.Info.Println("Signal received to kill connection", "ID", signal.connectionID, "UserID", signal.userID)
-				target.Terminate(signal.code, signal.reason)
-			}
 		}
+		s.mu.Unlock()
+		if target != nil {
+			log.Info.Println("Signal received to kill connection", "ID", signal.connectionID, "UserID", signal.userID)
+			target.Terminate(signal.code, signal.reason, op)
+		}
+
 	}
 }
 
@@ -214,7 +219,6 @@ func (s *server) removeClient(c *client) {
 }
 
 func (s *server) Signal(userID string, connectionID uint32, code int, reason string) {
-	const path errors.PathName = "websocket/server"
 	const op errors.Op = "server.Signal"
 	select {
 	case s.signalToWs <- signalToWsReq{userID: userID, connectionID: connectionID, code: code, reason: reason}:
@@ -288,6 +292,8 @@ func (s *server) setMaxIdleTime(d time.Duration) {
 }
 
 func (s *server) startReaper(d time.Duration) {
+	const op errors.Op = "server.startReaper"
+	var clients []*client
 	const minInterval = time.Second
 
 	if d < minInterval {
@@ -309,14 +315,12 @@ func (s *server) startReaper(d time.Duration) {
 			return
 		}
 
-		d, clients := s.cleanReaperLocked(d)
+		d, clients = s.cleanReaperLocked(d)
 		s.mu.Unlock()
 
-		if clients != nil {
-			for i := range clients {
-				clients[i].Terminate(websocket.CloseGoingAway, "idle for too long")
-				log.Info.Printf("connection %d (user %s) has been idle for too long", clients[i].ConnectionID(), clients[i].userID)
-			}
+		for i := range clients {
+			clients[i].Terminate(websocket.CloseGoingAway, "idle for too long", op)
+			log.Info.Printf("connection %d (user %s) has been idle for too long", clients[i].ConnectionID(), clients[i].userID)
 		}
 
 		if d < minInterval {
@@ -335,6 +339,7 @@ func (s *server) startReaper(d time.Duration) {
 }
 
 func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
+	const op errors.Op = "server.cleanReaperLocked"
 	if s.maxIdleTime <= 0 || s.idleList.Len() == 0 {
 		// Nothing to evict — sleep a full interval. Do NOT touch reaperCh;
 		// the goroutine is still running and owns its own lifecycle.
@@ -347,7 +352,13 @@ func (s *server) cleanReaperLocked(d time.Duration) (time.Duration, []*client) {
 	var next *list.Element
 	for e := s.idleList.Front(); e != nil; e = next {
 		next = e.Next()
-		client := e.Value.(*client)
+		client, ok := e.Value.(*client)
+		if !ok {
+			wrapErr := errors.B(path, op, fmt.Errorf("expected *client in the list, but found %v", client))
+			log.Error.Println(wrapErr)
+			continue
+		}
+
 		if client.lastActiveAt.Before(idleSince) {
 			closing = append(closing, client)
 			s.idleList.Remove(e)

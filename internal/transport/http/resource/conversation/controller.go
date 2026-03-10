@@ -16,14 +16,13 @@ import (
 )
 
 type Service interface {
-	Create(ctx context.Context, creatorId string, body ConversationRequest) (c *ConversationCreatedResponse, a *apierror.APIError, statusCode int)
-	Find(ctx context.Context, conversationId string, userId string) (c *Conversation, a *apierror.APIError, statusCode int)
-	FindAll(ctx context.Context, conversationId string) (cl ConversationsList, a *apierror.APIError, statusCode int)
-	GetMembers(ctx context.Context, conversationId string, userId string) (pl ParticipantsList, a *apierror.APIError, statusCode int)
-	UpdateParticipants(ctx context.Context, conversationId string, requesterId string, body UpdateConversationRequest) (pl ParticipantsList, a *apierror.APIError, statusCode int)
+	Create(ctx context.Context, creatorID string, body ConversationRequest) (c *ConversationCreatedResponse, a *apierror.APIError, statusCode int)
+	Find(ctx context.Context, conversationID string, userID string) (c *Conversation, a *apierror.APIError, statusCode int)
+	FindAll(ctx context.Context, conversationID string) (cl ConversationsList, a *apierror.APIError, statusCode int)
+	GetMembers(ctx context.Context, conversationID string, userID string) (pl ParticipantsList, a *apierror.APIError, statusCode int)
+	UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (pl ParticipantsList, a *apierror.APIError, statusCode int)
 }
 
-// Use message service
 type MessageService interface {
 	FindAll(ctx context.Context, conversationID string, userID string) (ml models.MessagesList, a *apierror.APIError, statusCode int)
 }
@@ -57,8 +56,8 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var body ConversationRequest
 
-	// authenticatedId represents the conversation creator who initiated the request.
-	authenticatedId, ok := ctx.UserId(r.Context())
+	// authenticatedID represents the conversation creator who initiated the request.
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
@@ -71,30 +70,36 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate the actual request body fields
-	if err := validation.Validate(body); err != nil {
+	errDetails, err := validation.Validate(body)
+	if err != nil {
 		log.Error.Println(err)
-		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("ConversationRequest", err))
+		apiresponse.Send(w, http.StatusBadRequest, apierror.Build(apierror.BadRequestCode, "failed to validate request body"))
 		return
 	}
 
-	conversation, apiErr, statusCode := h.service.Create(r.Context(), authenticatedId, body)
+	if errDetails != nil {
+		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("ConversationRequest", errDetails))
+		return
+	}
+
+	conversation, apiErr, statusCode := h.service.Create(r.Context(), authenticatedID, body)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
 
 	path := fmt.Sprintf("http://%s/api/v1.0%s", r.Host, r.URL.Path)
-	w.Header().Set("Location", path+"/"+conversation.ConversationId)
+	w.Header().Set("Location", path+"/"+conversation.ConversationID)
 	apiresponse.Send(w, http.StatusCreated, conversation)
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
-	conversations, apiErr, statusCode := h.service.FindAll(r.Context(), authenticatedId)
+	conversations, apiErr, statusCode := h.service.FindAll(r.Context(), authenticatedID)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -108,14 +113,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetConversation(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	conversationId := r.PathValue("id")
-	_, err := strconv.Atoi(conversationId)
+	conversationID := r.PathValue("id")
+	_, err := strconv.Atoi(conversationID)
 	if err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid conversation id",
 			apierror.WithTarget("conversation"),
@@ -124,7 +129,7 @@ func (h *Handler) GetConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conversation, apiErr, statusCode := h.service.Find(r.Context(), conversationId, authenticatedId)
+	conversation, apiErr, statusCode := h.service.Find(r.Context(), conversationID, authenticatedID)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -133,13 +138,13 @@ func (h *Handler) GetConversation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
-	conversationId := r.PathValue("id")
-	_, err := strconv.Atoi(conversationId)
+	conversationID := r.PathValue("id")
+	_, err := strconv.Atoi(conversationID)
 	if err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid conversation id",
 			apierror.WithTarget("conversation"),
@@ -148,7 +153,7 @@ func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	participants, apiErr, statusCode := h.service.GetMembers(r.Context(), conversationId, authenticatedId)
+	participants, apiErr, statusCode := h.service.GetMembers(r.Context(), conversationID, authenticatedID)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -162,14 +167,14 @@ func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateMembers(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	conversationId := r.PathValue("id")
-	if _, err := strconv.Atoi(conversationId); err != nil {
+	conversationID := r.PathValue("id")
+	if _, err := strconv.Atoi(conversationID); err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid conversation id",
 			apierror.WithTarget("conversation"),
 			apierror.WithInnerError("InvalidConversationIdFormatUsedInThePath"))
@@ -183,13 +188,20 @@ func (h *Handler) UpdateMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validation.Validate(body); err != nil {
+	errDetails, err := validation.Validate(body)
+	if err != nil {
 		log.Error.Println(err)
-		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("UpdateConversationRequest", err))
+		apiresponse.Send(w, http.StatusBadRequest, apierror.Build(apierror.BadRequestCode, "failed to validate request body"))
+		return
+
+	}
+
+	if errDetails != nil {
+		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("UpdateConversationRequest", errDetails))
 		return
 	}
 
-	participants, apiErr, statusCode := h.service.UpdateParticipants(r.Context(), conversationId, authenticatedId, body)
+	participants, apiErr, statusCode := h.service.UpdateParticipants(r.Context(), conversationID, authenticatedID, body)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -202,7 +214,7 @@ func (h *Handler) UpdateMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
-	authenticatedID, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return

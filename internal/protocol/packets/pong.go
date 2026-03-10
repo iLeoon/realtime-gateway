@@ -5,11 +5,11 @@ import "fmt"
 type PongPacket struct{}
 
 func (p *PongPacket) Type() uint8 {
-	return PONG
+	return Pong
 }
 
 func (p *PongPacket) String() string {
-	return fmt.Sprintf("PongPacket")
+	return fmt.Sprintln("PongPacket")
 }
 
 func (p *PongPacket) Encode() ([]byte, error) {

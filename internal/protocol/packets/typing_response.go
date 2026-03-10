@@ -22,7 +22,7 @@ func (r *ResponseTypingPacket) String() string {
 }
 
 func (r *ResponseTypingPacket) Type() uint8 {
-	return TYPING_RESPONSE
+	return TypingResponse
 }
 
 func (r *ResponseTypingPacket) Encode() ([]byte, error) {

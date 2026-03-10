@@ -19,7 +19,7 @@ func (t *TypingPacket) String() string {
 }
 
 func (t *TypingPacket) Type() uint8 {
-	return TYPING
+	return Typing
 }
 
 func (t *TypingPacket) Encode() ([]byte, error) {

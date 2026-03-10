@@ -18,12 +18,10 @@ func (d *ResponseDeleteMessagePacket) String() string {
 }
 
 func (d *ResponseDeleteMessagePacket) Type() uint8 {
-	return DELETE_RESPONSE
+	return DeleteResponse
 }
 
 func (d *ResponseDeleteMessagePacket) Encode() ([]byte, error) {
-	const path errors.PathName = "packets/delete_response"
-	const op errors.Op = "ResponseDeleteMessagePacket.Encode"
 	b := make([]byte, 12)
 
 	binary.BigEndian.PutUint32(b[:4], d.MessageID)
@@ -33,7 +31,7 @@ func (d *ResponseDeleteMessagePacket) Encode() ([]byte, error) {
 	return b, nil
 }
 
-func (u *ResponseDeleteMessagePacket) Decode(b []byte) error {
+func (d *ResponseDeleteMessagePacket) Decode(b []byte) error {
 	const path errors.PathName = "packets/delet_response"
 	const op errors.Op = "ResponseDeleteMessagePacket.Decode"
 
@@ -41,18 +39,18 @@ func (u *ResponseDeleteMessagePacket) Decode(b []byte) error {
 		return errors.B(path, op, errors.Client, "delete response message packet length can't be less than 8")
 	}
 
-	u.MessageID = binary.BigEndian.Uint32(b[:4])
-	if u.MessageID == 0 {
+	d.MessageID = binary.BigEndian.Uint32(b[:4])
+	if d.MessageID == 0 {
 		return errors.B(path, op, "MessageID field is empty or 0")
 	}
 
-	u.ConversationID = binary.BigEndian.Uint32(b[4:8])
-	if u.MessageID == 0 {
+	d.ConversationID = binary.BigEndian.Uint32(b[4:8])
+	if d.MessageID == 0 {
 		return errors.B(path, op, "ConversationID field is empty or 0")
 	}
 
-	u.AuthorID = binary.BigEndian.Uint32(b[8:12])
-	if u.MessageID == 0 {
+	d.AuthorID = binary.BigEndian.Uint32(b[8:12])
+	if d.MessageID == 0 {
 		return errors.B(path, op, "Author field is empty or 0")
 	}
 	return nil

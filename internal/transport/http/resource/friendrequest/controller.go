@@ -11,6 +11,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/validation"
+	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
 type Service interface {
@@ -36,9 +37,9 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 	mux.HandleFunc("POST /friendrequests", h.Create)                                // Create a friend request
 	mux.HandleFunc("GET /friendrequests/sent", h.Sent)                              // Fetch requests sent by the author
 	mux.HandleFunc("GET /friendrequests/received", h.Received)                      // Fetch requests sent to the author
-	mux.HandleFunc("PATCH /friendrequests/received/{targetId}", h.AcceptReceived)   // Accept a received request
-	mux.HandleFunc("DELETE /friendrequests/sent/{targetId}", h.CancelSent)          // Cancel a sent request
-	mux.HandleFunc("DELETE /friendrequests/received/{targetId}", h.DeclineReceived) // Decline a received request
+	mux.HandleFunc("PATCH /friendrequests/received/{targetID}", h.AcceptReceived)   // Accept a received request
+	mux.HandleFunc("DELETE /friendrequests/sent/{targetID}", h.CancelSent)          // Cancel a sent request
+	mux.HandleFunc("DELETE /friendrequests/received/{targetID}", h.DeclineReceived) // Decline a received request
 
 	return mux
 }
@@ -46,7 +47,7 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var body FriendRequestBody
 
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
@@ -58,13 +59,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidJSONFormat())
 		return
 	}
-
-	if err := validation.Validate(body); err != nil {
-		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("FriendRequestBody", err))
+	errDetails, err := validation.Validate(body)
+	if err != nil {
+		log.Error.Println(err)
+		apiresponse.Send(w, http.StatusBadRequest, apierror.Build(apierror.BadRequestCode, "failed to validate request body"))
 		return
 	}
 
-	fr, apiErr, statusCode := h.service.Create(r.Context(), authenticatedId, body)
+	if errDetails != nil {
+		apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidArgument("FriendRequest", errDetails))
+		return
+	}
+
+	fr, apiErr, statusCode := h.service.Create(r.Context(), authenticatedID, body)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -75,13 +82,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	apiresponse.Send(w, http.StatusCreated, fr)
 }
 func (h *Handler) Sent(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	fl, apiErr, statusCode := h.service.GetSent(r.Context(), authenticatedId)
+	fl, apiErr, statusCode := h.service.GetSent(r.Context(), authenticatedID)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -94,13 +101,13 @@ func (h *Handler) Sent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Received(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	fl, apiErr, statusCode := h.service.GetReceived(r.Context(), authenticatedId)
+	fl, apiErr, statusCode := h.service.GetReceived(r.Context(), authenticatedID)
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
@@ -113,22 +120,22 @@ func (h *Handler) Received(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AcceptReceived(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	targetId := r.PathValue("targetId")
-	if _, err := strconv.Atoi(targetId); err != nil {
+	targetID := r.PathValue("targetID")
+	if _, err := strconv.Atoi(targetID); err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid target user id",
-			apierror.WithTarget("targetId"),
+			apierror.WithTarget("targetID"),
 			apierror.WithInnerError("InvalidTargetIdFormatUsedInThePath"))
 		apiresponse.Send(w, http.StatusBadRequest, apiErr)
 		return
 	}
 
-	if apiErr, statusCode := h.service.AcceptReceived(r.Context(), authenticatedId, targetId); apiErr != nil {
+	if apiErr, statusCode := h.service.AcceptReceived(r.Context(), authenticatedID, targetID); apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
@@ -137,22 +144,22 @@ func (h *Handler) AcceptReceived(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CancelSent(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	targetId := r.PathValue("targetId")
-	if _, err := strconv.Atoi(targetId); err != nil {
+	targetID := r.PathValue("targetID")
+	if _, err := strconv.Atoi(targetID); err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid target user id",
-			apierror.WithTarget("targetId"),
+			apierror.WithTarget("targetID"),
 			apierror.WithInnerError("InvalidTargetIdFormatUsedInThePath"))
 		apiresponse.Send(w, http.StatusBadRequest, apiErr)
 		return
 	}
 
-	if apiErr, statusCode := h.service.CancelSent(r.Context(), authenticatedId, targetId); apiErr != nil {
+	if apiErr, statusCode := h.service.CancelSent(r.Context(), authenticatedID, targetID); apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
@@ -161,22 +168,22 @@ func (h *Handler) CancelSent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeclineReceived(w http.ResponseWriter, r *http.Request) {
-	authenticatedId, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return
 	}
 
-	targetId := r.PathValue("targetId")
-	if _, err := strconv.Atoi(targetId); err != nil {
+	targetID := r.PathValue("targetID")
+	if _, err := strconv.Atoi(targetID); err != nil {
 		apiErr := apierror.Build(apierror.BadRequestCode, "invalid target user id",
-			apierror.WithTarget("targetId"),
+			apierror.WithTarget("targetID"),
 			apierror.WithInnerError("InvalidTargetIdFormatUsedInThePath"))
 		apiresponse.Send(w, http.StatusBadRequest, apiErr)
 		return
 	}
 
-	if apiErr, statusCode := h.service.DeclineReceived(r.Context(), authenticatedId, targetId); apiErr != nil {
+	if apiErr, statusCode := h.service.DeclineReceived(r.Context(), authenticatedID, targetID); apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}

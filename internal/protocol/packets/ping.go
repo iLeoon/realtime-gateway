@@ -5,11 +5,11 @@ import "fmt"
 type PingPacket struct{}
 
 func (p *PingPacket) Type() uint8 {
-	return PING
+	return Ping
 }
 
 func (p *PingPacket) String() string {
-	return fmt.Sprintf("PingPacket")
+	return fmt.Sprintln("PingPacket")
 }
 
 func (p *PingPacket) Encode() ([]byte, error) {

@@ -25,7 +25,7 @@ func Send(w http.ResponseWriter, status int, data interface{}) {
 		w.WriteHeader(http.StatusInternalServerError)
 
 		apiErr := apierror.Build(apierror.InternalServerErrorCode,
-			"unexpected error occured while trying to process response",
+			"unexpected error while trying to process response",
 			apierror.WithTarget("response"),
 			apierror.WithInnerError("FailedToEncodeRespBody"),
 		)
@@ -49,7 +49,7 @@ func Send(w http.ResponseWriter, status int, data interface{}) {
 			log.Error.Printf("%s: %s: unexpected timeout error: %v", path, op, err)
 			return
 		}
-		log.Error.Printf("%s: %s: unexpected error occured when sending the resposne message: %v", path, op, err)
+		log.Error.Printf("%s: %s: unexpected error while sending the resposne message: %v", path, op, err)
 		return
 	}
 

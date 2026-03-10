@@ -21,7 +21,7 @@ func NewRepo(db *pgxpool.Pool) *repository {
 	}
 }
 
-func (r *repository) CreateConversation(ctx context.Context, creatorId string, cr ConversationRequest) (*ConversationCreatedResponse, error) {
+func (r *repository) CreateConversation(ctx context.Context, creatorID string, cr ConversationRequest) (*ConversationCreatedResponse, error) {
 	const op errors.Op = "repository.CreateConversation"
 
 	c := &ConversationCreatedResponse{}
@@ -37,7 +37,7 @@ func (r *repository) CreateConversation(ctx context.Context, creatorId string, c
 	    WHERE uc1.user_id = $1
 	      AND uc2.user_id = $2
 	      AND c.conversation_type = 'private-chat'
-	)`, creatorId, cr.ParticipantIDs[0]).Scan(&isExist)
+	)`, creatorID, cr.ParticipantIDs[0]).Scan(&isExist)
 		if err != nil {
 			return nil, apierror.DatabaseErrorClassification(path, op, err)
 		}
@@ -59,19 +59,19 @@ func (r *repository) CreateConversation(ctx context.Context, creatorId string, c
 	err = tx.QueryRow(ctx,
 		`INSERT INTO conversations (creator_id, conversation_type, group_name) VALUES($1, $2, $3)
 		RETURNING conversation_id, creator_id, conversation_type, group_name, created_at`,
-		creatorId, cr.ConversationType, cr.GroupName).Scan(&c.ConversationId, &c.CreatorID, &c.ConversationType, &c.GroupName, &c.CreatedAt)
+		creatorID, cr.ConversationType, cr.GroupName).Scan(&c.ConversationID, &c.CreatorID, &c.ConversationType, &c.GroupName, &c.CreatedAt)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 	}
 	// Insert the creator of the conversation
-	_, err = tx.Exec(ctx, `INSERT INTO users_conversations (conversation_id, user_id) VALUES($1, $2)`, c.ConversationId, creatorId)
+	_, err = tx.Exec(ctx, `INSERT INTO users_conversations (conversation_id, user_id) VALUES($1, $2)`, c.ConversationID, creatorID)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 	}
 	// Insert all members wether the chat was private or group
 	for _, v := range cr.ParticipantIDs {
 		// Insert both creator and recipient into users_conversations.
-		_, err = tx.Exec(ctx, `INSERT INTO users_conversations (conversation_id, user_id) VALUES($1, $2)`, c.ConversationId, v)
+		_, err = tx.Exec(ctx, `INSERT INTO users_conversations (conversation_id, user_id) VALUES($1, $2)`, c.ConversationID, v)
 		if err != nil {
 			return nil, apierror.DatabaseErrorClassification(path, op, err)
 		}
@@ -84,7 +84,7 @@ func (r *repository) CreateConversation(ctx context.Context, creatorId string, c
 	return c, nil
 }
 
-func (r *repository) FindConversation(ctx context.Context, conversationId string, userId string) (*Conversation, error) {
+func (r *repository) FindConversation(ctx context.Context, conversationID string, userID string) (*Conversation, error) {
 	const op errors.Op = "repository.FindConversation"
 	c := &Conversation{}
 
@@ -97,8 +97,8 @@ func (r *repository) FindConversation(ctx context.Context, conversationId string
 		c.created_at
         FROM conversations c
         JOIN users_conversations uc ON uc.conversation_id = c.conversation_id AND uc.user_id = $2
-        WHERE c.conversation_id = $1`, conversationId, userId).Scan(
-		&c.ConversationId,
+        WHERE c.conversation_id = $1`, conversationID, userID).Scan(
+		&c.ConversationID,
 		&c.CreatorID,
 		&c.ConversationType,
 		&c.GroupName,
@@ -108,7 +108,7 @@ func (r *repository) FindConversation(ctx context.Context, conversationId string
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
 	}
 
-	p, err := r.FetchMembers(ctx, conversationId)
+	p, err := r.FetchMembers(ctx, conversationID)
 	if err != nil {
 		return nil, errors.B(path, op, err)
 	}
@@ -117,7 +117,7 @@ func (r *repository) FindConversation(ctx context.Context, conversationId string
 	return c, nil
 }
 
-func (r *repository) FindConversations(ctx context.Context, userId string) (ConversationsList, error) {
+func (r *repository) FindConversations(ctx context.Context, userID string) (ConversationsList, error) {
 	var conversations ConversationsList
 	const op errors.Op = "repository.FindConversations"
 
@@ -149,7 +149,7 @@ func (r *repository) FindConversations(ctx context.Context, userId string) (Conv
 	    FROM users_conversations uc
 	    WHERE uc.conversation_id = c.conversation_id
 	      AND uc.user_id = $1
-	)`, userId)
+	)`, userID)
 	if err != nil {
 		return conversations, apierror.DatabaseErrorClassification(path, op, err)
 	}
@@ -159,7 +159,7 @@ func (r *repository) FindConversations(ctx context.Context, userId string) (Conv
 		var c Conversation
 		var participantsRaw []byte
 		err := rows.Scan(
-			&c.ConversationId,
+			&c.ConversationID,
 			&c.CreatorID,
 			&c.ConversationType,
 			&c.GroupName,
@@ -184,7 +184,7 @@ func (r *repository) FindConversations(ctx context.Context, userId string) (Conv
 	return conversations, nil
 }
 
-func (r *repository) FindMembers(ctx context.Context, conversationId string, userId string) (ParticipantsList, error) {
+func (r *repository) FindMembers(ctx context.Context, conversationID string, userID string) (ParticipantsList, error) {
 	const op errors.Op = "repository.FindMembers"
 	var pl ParticipantsList
 	var isExist bool
@@ -194,19 +194,19 @@ func (r *repository) FindMembers(ctx context.Context, conversationId string, use
 	    SELECT EXISTS (
 	        SELECT 1 FROM users_conversations
 	        WHERE conversation_id = $1 AND user_id = $2
-	    )`, conversationId, userId).Scan(&isExist)
+	    )`, conversationID, userID).Scan(&isExist)
 	if err != nil {
 		return pl, apierror.DatabaseErrorClassification(path, op, err)
 	}
 
 	// EXISTS returns a boolean value
 	// true if there was a row or false if there was not
-	// that's why we have to explicitly specifiy the error if there was no record.
+	// that's why we have to explicitly specfiy the error if there was no record.
 	if !isExist {
 		return pl, errors.B(path, op, errors.NotFound, "user is not a participant of this conversation")
 	}
 	// Fetch the conversation participants.
-	p, err := r.FetchMembers(ctx, conversationId)
+	p, err := r.FetchMembers(ctx, conversationID)
 	if err != nil {
 		return pl, errors.B(path, op, err)
 	}
@@ -214,7 +214,7 @@ func (r *repository) FindMembers(ctx context.Context, conversationId string, use
 	return pl, nil
 }
 
-func (r *repository) UpdateParticipants(ctx context.Context, conversationId string, requesterId string, body UpdateConversationRequest) (ParticipantsList, error) {
+func (r *repository) UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (ParticipantsList, error) {
 	const op errors.Op = "repository.UpdateParticipants"
 	var pl ParticipantsList
 
@@ -223,7 +223,7 @@ func (r *repository) UpdateParticipants(ctx context.Context, conversationId stri
 		`SELECT EXISTS (
 			SELECT 1 FROM users_conversations
 			WHERE conversation_id = $1 AND user_id = $2
-		)`, conversationId, requesterId).Scan(&exists)
+		)`, conversationID, requesterID).Scan(&exists)
 	if err != nil {
 		return pl, apierror.DatabaseErrorClassification(path, op, err)
 	}
@@ -234,7 +234,7 @@ func (r *repository) UpdateParticipants(ctx context.Context, conversationId stri
 	var conversationType string
 	err = r.db.QueryRow(ctx,
 		`SELECT conversation_type FROM conversations WHERE conversation_id = $1`,
-		conversationId).Scan(&conversationType)
+		conversationID).Scan(&conversationType)
 	if err != nil {
 		return pl, apierror.DatabaseErrorClassification(path, op, err)
 	}
@@ -245,13 +245,13 @@ func (r *repository) UpdateParticipants(ctx context.Context, conversationId stri
 	for _, id := range body.ParticipantIDs {
 		_, err = r.db.Exec(ctx,
 			`INSERT INTO users_conversations (conversation_id, user_id) VALUES($1, $2) ON CONFLICT DO NOTHING`,
-			conversationId, id)
+			conversationID, id)
 		if err != nil {
 			return pl, apierror.DatabaseErrorClassification(path, op, err)
 		}
 	}
 
-	participants, err := r.FetchMembers(ctx, conversationId)
+	participants, err := r.FetchMembers(ctx, conversationID)
 	if err != nil {
 		return pl, errors.B(path, op, err)
 	}
@@ -263,7 +263,7 @@ func (r *repository) UpdateParticipants(ctx context.Context, conversationId stri
 // of a conversation including the conversation creator
 // and assign "owner" for the conversation creator
 // and "member" for the rest of the conversation members
-func (r *repository) FetchMembers(ctx context.Context, conversationId string) ([]Participant, error) {
+func (r *repository) FetchMembers(ctx context.Context, conversationID string) ([]Participant, error) {
 	const op errors.Op = "repository.FetchMembers"
 	var ps []Participant
 
@@ -279,7 +279,7 @@ func (r *repository) FetchMembers(ctx context.Context, conversationId string) ([
 	    JOIN users u ON u.user_id = uc.user_id
 	    JOIN conversations c ON c.conversation_id = uc.conversation_id
 	    WHERE uc.conversation_id = $1
-	`, conversationId)
+	`, conversationID)
 	if err != nil {
 		return ps, apierror.DatabaseErrorClassification(path, op, err)
 	}
@@ -288,7 +288,7 @@ func (r *repository) FetchMembers(ctx context.Context, conversationId string) ([
 	for rows.Next() {
 		var p Participant
 		err := rows.Scan(
-			&p.UserId,
+			&p.UserID,
 			&p.UserName,
 			&p.Email,
 			&p.Image,

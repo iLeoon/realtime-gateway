@@ -18,10 +18,11 @@ type Server interface {
 }
 
 const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 512
+	writeWait                      = 10 * time.Second
+	pongWait                       = 60 * time.Second
+	pingPeriod                     = (pongWait * 9) / 10
+	maxMessageSize                 = 512
+	clientPath     errors.PathName = "websocket/client"
 )
 
 // client represents a single WebSocket connection between the browser and the server.
@@ -45,15 +46,23 @@ type client struct {
 }
 
 func (c *client) readPump() {
+	const op errors.Op = "client.readPump"
 	wsCode := websocket.CloseGoingAway
 	reason := "connection closed"
 	defer func() {
-		c.Terminate(wsCode, reason)
+		c.Terminate(wsCode, reason, op)
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		wrapErr := errors.B(clientPath, op, err)
+		log.Error.Println("failed to read the message from the websocket", wrapErr)
+		return
+	}
 	c.conn.SetPongHandler(func(appData string) error {
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			wrapErr := errors.B(clientPath, op, err)
+			log.Error.Println("failed to read the message from the websocket", wrapErr)
+		}
 		return nil
 	})
 	for {
@@ -63,7 +72,7 @@ func (c *client) readPump() {
 				reason = "client initiated close"
 				log.Info.Println("Client disconnected", "ClientID", c.connectionID)
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				reason = "unexpected error"
+				reason = "unexpected error connection is closed"
 				log.Error.Println("unexpected error shutting down websocket server", err)
 			}
 			return
@@ -95,50 +104,65 @@ func (c *client) readPump() {
 }
 
 func (c *client) writePump() {
+	const op errors.Op = "client.writePumo"
+
 	wsCode := websocket.CloseGoingAway
-	reason := "connection closed"
+	reason := "connection is closing"
+	wrapErr := errors.B(clientPath, op)
 
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.Terminate(wsCode, reason)
+		c.Terminate(wsCode, reason, op)
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.writeSocketMessage(message); err != nil {
+				log.Error.Println(wrapErr, "failed to write the message to the socket", err)
+			}
+
 			if !ok {
 				return
 			}
 
-			msg, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				log.Error.Println("faild to write the message", err)
-				return
-			}
-
-			if _, err := msg.Write(message); err != nil {
-				log.Error.Println("failed to write message body", err)
-				return
-			}
-
-			if err := msg.Close(); err != nil {
-				log.Error.Println("failed to close writer", err)
-				return
-			}
-
-			// Mark the connection as inactive after writing.
-			c.server.putConn(c)
-
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Error.Println(wrapErr, "failed to send the ticker", err)
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Error.Println(wrapErr, "failed to send the ticker", err)
 				return
 			}
 		}
 
 	}
+
+}
+
+func (c *client) writeSocketMessage(message []byte) error {
+	if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+		return err
+	}
+
+	w, err := c.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.Write(message); err != nil {
+		return err
+	}
+
+	if err := w.Close(); err != nil {
+		return err
+	}
+
+	// Mark the connection as inactive
+	c.server.putConn(c)
+	return nil
 
 }
 
@@ -163,21 +187,25 @@ func (c *client) limiterFaucet() {
 }
 
 func (c *client) Enqueue(message []byte) {
+	const op errors.Op = "client.Enqueue"
 	select {
 	case c.send <- message:
 		return
 
 	default:
 		log.Error.Println("the send channel for the sender is fulled")
-		c.Terminate(websocket.ClosePolicyViolation, "unexpected error please reconnect")
+		c.Terminate(websocket.ClosePolicyViolation, "unexpected error please reconnect", op)
 		return
 	}
 }
 
-func (c *client) Terminate(code int, reason string) {
+func (c *client) Terminate(code int, reason string, op errors.Op) {
 	c.once.Do(func() {
 		c.server.removeClient(c)
-		c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
+		if err := c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason)); err != nil {
+			wrapErr := errors.B(clientPath, op, err)
+			log.Error.Printf("failed to send close message to client %s: %v", c.connectionID, wrapErr)
+		}
 		c.conn.Close()
 		close(c.send)
 		close(c.done)

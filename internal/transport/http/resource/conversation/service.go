@@ -9,11 +9,11 @@ import (
 )
 
 type Repository interface {
-	CreateConversation(ctx context.Context, creatorId string, body ConversationRequest) (c *ConversationCreatedResponse, err error)
-	FindConversation(ctx context.Context, conversationId string, userId string) (c *Conversation, err error)
-	FindConversations(ctx context.Context, userId string) (cl ConversationsList, err error)
-	FindMembers(ctx context.Context, conversationId string, userId string) (pl ParticipantsList, err error)
-	UpdateParticipants(ctx context.Context, conversationId string, requesterId string, body UpdateConversationRequest) (pl ParticipantsList, err error)
+	CreateConversation(ctx context.Context, creatorID string, body ConversationRequest) (c *ConversationCreatedResponse, err error)
+	FindConversation(ctx context.Context, conversationID string, userID string) (c *Conversation, err error)
+	FindConversations(ctx context.Context, userID string) (cl ConversationsList, err error)
+	FindMembers(ctx context.Context, conversationID string, userID string) (pl ParticipantsList, err error)
+	UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (pl ParticipantsList, err error)
 }
 
 type service struct {
@@ -28,11 +28,11 @@ func NewService(repo Repository) *service {
 	}
 }
 
-func (s *service) Create(ctx context.Context, creatorId string, body ConversationRequest) (*ConversationCreatedResponse, *apierror.APIError, int) {
+func (s *service) Create(ctx context.Context, creatorID string, body ConversationRequest) (*ConversationCreatedResponse, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	conversation, err := s.repo.CreateConversation(ctx, creatorId, body)
+	conversation, err := s.repo.CreateConversation(ctx, creatorID, body)
 	if err != nil {
 		log.Error.Println("create conversation failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversation")
@@ -41,11 +41,11 @@ func (s *service) Create(ctx context.Context, creatorId string, body Conversatio
 	return conversation, nil, 0
 }
 
-func (s *service) Find(ctx context.Context, conversationId string, userId string) (*Conversation, *apierror.APIError, int) {
+func (s *service) Find(ctx context.Context, conversationID string, userID string) (*Conversation, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	conversation, err := s.repo.FindConversation(ctx, conversationId, userId)
+	conversation, err := s.repo.FindConversation(ctx, conversationID, userID)
 	if err != nil {
 		log.Error.Println("find conversation failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversation")
@@ -54,11 +54,11 @@ func (s *service) Find(ctx context.Context, conversationId string, userId string
 	return conversation, nil, 0
 }
 
-func (s *service) FindAll(ctx context.Context, userId string) (ConversationsList, *apierror.APIError, int) {
+func (s *service) FindAll(ctx context.Context, userID string) (ConversationsList, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	conversations, err := s.repo.FindConversations(ctx, userId)
+	conversations, err := s.repo.FindConversations(ctx, userID)
 	if err != nil {
 		log.Error.Println("find list of conversations failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "conversations")
@@ -67,11 +67,11 @@ func (s *service) FindAll(ctx context.Context, userId string) (ConversationsList
 	return conversations, nil, 0
 }
 
-func (s *service) UpdateParticipants(ctx context.Context, conversationId string, requesterId string, body UpdateConversationRequest) (ParticipantsList, *apierror.APIError, int) {
+func (s *service) UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (ParticipantsList, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	pl, err := s.repo.UpdateParticipants(ctx, conversationId, requesterId, body)
+	pl, err := s.repo.UpdateParticipants(ctx, conversationID, requesterID, body)
 	if err != nil {
 		log.Error.Println("update participants failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "participants")
@@ -80,11 +80,11 @@ func (s *service) UpdateParticipants(ctx context.Context, conversationId string,
 	return pl, nil, 0
 }
 
-func (s *service) GetMembers(ctx context.Context, conversationId string, userId string) (ParticipantsList, *apierror.APIError, int) {
+func (s *service) GetMembers(ctx context.Context, conversationID string, userID string) (ParticipantsList, *apierror.APIError, int) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	pl, err := s.repo.FindMembers(ctx, conversationId, userId)
+	pl, err := s.repo.FindMembers(ctx, conversationID, userID)
 	if err != nil {
 		log.Error.Println("find list of conversation members failed", err)
 		apiErr, statusCode := apierror.ErrorMapper(err, "participants")

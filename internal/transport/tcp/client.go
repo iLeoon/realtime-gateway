@@ -16,12 +16,14 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/session"
 )
 
+const clientPath errors.PathName = "tcp/client"
+
 type Router interface {
-	Route(p packets.BuildPayload, userId string, connectionID uint32)
+	Route(p packets.BuildPayload, userID string, connectionID uint32)
 }
 
 type Signaler interface {
-	Signal(userId string, connectionId uint32, code int, reason string)
+	Signal(userID string, connectionID uint32, code int, reason string)
 }
 
 // TcpClient acts as the transporter between the WebSocket gateway and the
@@ -66,7 +68,7 @@ func NewFactory(c *config.Config, r Router, s Signaler) *tcpClientFactory {
 // between the websocket gateway and tcp server
 // to send/receive messages.
 func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (session.Session, error) {
-	conn, err := net.Dial("tcp", t.config.TcpPort)
+	conn, err := net.Dial("tcp", t.config.TCPPort)
 	if err != nil {
 		return nil, err
 	}
@@ -94,105 +96,127 @@ func (t *tcpClientFactory) NewClient(userID string, connectionID uint32) (sessio
 // encodes it into a protocol frame, and transmits it
 // to the TCP engine using the underlying TCP connection.
 func (t *tcpClient) WriteToServer(data []byte) error {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.WriteToServer"
 	var pkt packets.BuildPayload
 	cp := &ClientPayload{}
 
 	// Unmarshal the incmoing byets from the gateway to the client payload struct
-	err := json.Unmarshal(data, cp)
-	if err != nil {
-		return errors.B(path, op, errors.Client, err)
+	if err := json.Unmarshal(data, cp); err != nil {
+		return errors.B(clientPath, op, errors.Client, err)
 	}
 
 	// Check the message type (opcode) based on the ClientPayload.Opcode
 	// then build the packet and pass to writePacket to send it
 	// into the raw tcp connection
+	var err error
 	switch cp.Opcode {
 	case "send_message":
-		// Build the readable packet.
-		var data SendMessagePayload
-		err := json.Unmarshal(cp.Payload, &data)
-		if err != nil {
-			return errors.B(path, op, err, errors.Client)
-		}
-		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-
-		pkt = &packets.SendMessagePacket{
-			ConversationID: uint32(convIDToInt),
-			Content:        data.Content,
-		}
+		pkt, err = buildSendMessage(cp, op)
 	case "update_message":
-		var data UpdateMessagePayload
-		err := json.Unmarshal(cp.Payload, &data)
-		if err != nil {
-			return errors.B(path, op, err, errors.Client)
-		}
-
-		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-
-		messageIDToInt, err := strconv.ParseUint(data.MessageID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-
-		pkt = &packets.UpdateMessagePacket{
-			ConversationID: uint32(convIDToInt),
-			MessageID:      uint32(messageIDToInt),
-			Content:        data.Content,
-		}
-
+		pkt, err = buildUpdateMessage(cp, op)
 	case "delete_message":
-		var data DeleteMessagePayload
-		err := json.Unmarshal(cp.Payload, &data)
-		if err != nil {
-			return errors.B(path, op, err, errors.Client)
-		}
-
-		messageIDToInt, err := strconv.ParseUint(data.MessageID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-
-		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-		pkt = &packets.DeleteMessagePacket{
-			MessageID:      uint32(messageIDToInt),
-			ConversationID: uint32(convIDToInt),
-		}
-
+		pkt, err = buildDeleteMessage(cp, op)
 	case "typing":
-		var data TypingPayload
-		err := json.Unmarshal(cp.Payload, &data)
-		if err != nil {
-			return errors.B(path, op, err, errors.Client)
-		}
-
-		convIDToInt, err := strconv.ParseUint(data.ConversationID, 10, 32)
-		if err != nil {
-			return errors.B(path, op, errors.Client, err)
-		}
-
-		pkt = &packets.TypingPacket{
-			ConversationID: uint32(convIDToInt),
-			IsTyping:       data.IsTyping,
-		}
+		pkt, err = buildTyping(cp, op)
 	default:
-		return errors.B(path, op, errors.Client, errors.Errorf("Invalid packet type %T", cp.Opcode))
+		return errors.B(clientPath, op, errors.Client, errors.Errorf("Invalid packet type %T", cp.Opcode))
+	}
+	if err != nil {
+		return errors.B(clientPath, op, "processing the packet to write it to the tcp server failed", err)
 	}
 
 	if err := t.writePacket(pkt); err != nil {
-		return errors.B(path, op, err)
+		return errors.B(clientPath, op, err)
 	}
 	return nil
+}
+
+func toUint32(str string) (uint32, error) {
+	value, err := strconv.ParseUint(str, 10, 32)
+	return uint32(value), err
+}
+
+func buildSendMessage(cp *ClientPayload, op errors.Op) (*packets.SendMessagePacket, error) {
+	// Build the readable packet.
+	var data SendMessagePayload
+	err := json.Unmarshal(cp.Payload, &data)
+	if err != nil {
+		return nil, errors.B(clientPath, op, err, errors.Client)
+	}
+	convID, err := toUint32(data.ConversationID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+
+	pkt := &packets.SendMessagePacket{
+		ConversationID: convID,
+		Content:        data.Content,
+	}
+	return pkt, nil
+}
+
+func buildUpdateMessage(cp *ClientPayload, op errors.Op) (*packets.UpdateMessagePacket, error) {
+	var data UpdateMessagePayload
+	err := json.Unmarshal(cp.Payload, &data)
+	if err != nil {
+		return nil, errors.B(clientPath, op, err, errors.Client)
+	}
+	convID, err := toUint32(data.ConversationID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+
+	messageID, err := toUint32(data.MessageID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+	pkt := &packets.UpdateMessagePacket{
+		ConversationID: convID,
+		MessageID:      messageID,
+		Content:        data.Content,
+	}
+	return pkt, nil
+}
+
+func buildDeleteMessage(cp *ClientPayload, op errors.Op) (*packets.DeleteMessagePacket, error) {
+	var data DeleteMessagePayload
+	err := json.Unmarshal(cp.Payload, &data)
+	if err != nil {
+		return nil, errors.B(clientPath, op, err, errors.Client)
+	}
+
+	convID, err := toUint32(data.ConversationID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+
+	messageID, err := toUint32(data.MessageID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+	pkt := &packets.DeleteMessagePacket{
+		MessageID:      messageID,
+		ConversationID: convID,
+	}
+	return pkt, nil
+}
+
+func buildTyping(cp *ClientPayload, op errors.Op) (*packets.TypingPacket, error) {
+	var data TypingPayload
+	err := json.Unmarshal(cp.Payload, &data)
+	if err != nil {
+		return nil, errors.B(clientPath, op, err, errors.Client)
+	}
+
+	convID, err := toUint32(data.ConversationID)
+	if err != nil {
+		return nil, errors.B(clientPath, op, errors.Client, err)
+	}
+	pkt := &packets.TypingPacket{
+		ConversationID: convID,
+		IsTyping:       data.IsTyping,
+	}
+	return pkt, nil
 }
 
 // ReadFromServer performs the reverse operation of ReadFromGateway. It
@@ -203,57 +227,45 @@ func (t *tcpClient) WriteToServer(data []byte) error {
 // This method must run inside its own goroutine because it performs
 // blocking I/O while waiting for incoming data from the TCP connection.
 func (t *tcpClient) ReadFromServer() {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.ReadFromServer"
 	wsCode := 1011 // default: internal server error
 	var reason string
 	defer func() {
 		t.signal.Signal(t.userID, t.connectionID, wsCode, reason)
 		t.conn.Close()
-		log.Info.Printf("%q: %q: tcp client terminated it's connection", path, op)
+		log.Info.Printf("%q: %q: tcp client terminated it's connection", clientPath, op)
 	}()
 
 	for {
 		// Decode the frame.
 		if err := t.conn.SetReadDeadline(time.Now().Add(readDuration)); err != nil {
-			wrappedErr := errors.B(path, op, err)
+			wrappedErr := errors.B(clientPath, op, err)
 			log.Error.Println("failed to read the packet from the peer", wrappedErr)
 			return
 		}
 		frame, err := protocol.DecodeFrame(t.conn)
 		if err != nil {
-			// Error that gives context to the rest of the logs
-			wrappedErr := errors.B(path, op, err)
-			switch {
-			case errors.Is(err, io.EOF):
-				log.Info.Println("TCP connection is closed by peer(server)", wrappedErr)
-				wsCode, reason = 1006, "server closed connection"
-				return
-			case errors.Is(err, net.ErrClosed):
-				wsCode, reason = 1000, "connection is closed"
-				return
-			case errors.Is(err, os.ErrDeadlineExceeded):
-				wsCode, reason = 1006, "unexpected failure please refresh"
-				log.Info.Println("read deadline exceeded, closing connection", wrappedErr)
-				return
-			default:
-				log.Error.Println("unexpected error from the tcp server", wrappedErr)
-				wsCode, reason = 1011, "connection is terminated"
-				return
-			}
+			var readErr error
+			// wrap error for more context
+			wrappedErr := errors.B(clientPath, op, err)
+			reason, wsCode, readErr = handleDecodeErr(err, op)
+			log.Error.Println(wrappedErr, readErr)
+			return
 		}
 
 		switch pkt := frame.Payload.(type) {
 		case *packets.PingPacket:
 			if err := t.pongRes(); err != nil {
-				errorWrapper := errors.B(path, op, err)
+				errorWrapper := errors.B(clientPath, op, err)
 				log.Error.Println("pong packet failed", errorWrapper)
-				wsCode, reason = 1006, "unexpected failure please refresh"
+				wsCode = 1006
+				reason = "unexpected failure"
 				return
 			}
 		case *packets.ErrorPacket:
 			if pkt.Code == errors.Client {
-				wsCode, reason = 1008, pkt.Message // protocol error
+				wsCode = 1008
+				reason = pkt.Message
 				return
 			}
 
@@ -272,6 +284,32 @@ func (t *tcpClient) ReadFromServer() {
 	}
 }
 
+func handleDecodeErr(err error, op errors.Op) (string, int, error) {
+	var readErr error
+	// reason is a readable message to the websocket consumer
+	var reason string
+	// wsCode is the websocket closing code
+	var wsCode int
+	switch {
+	case errors.Is(err, io.EOF):
+		readErr = errors.B(clientPath, op, "TCP connection is closed by peer(server)")
+		wsCode = 1006
+		reason = "server closed connection"
+	case errors.Is(err, net.ErrClosed):
+		wsCode = 1000
+		reason = "connection is already closed"
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		readErr = errors.B(clientPath, op, "read deadline exceeded, closing connection")
+		wsCode = 1006
+		reason = "unexpected failure please refresh"
+	default:
+		readErr = errors.B(clientPath, op, "unexpected error from the tcp server")
+		wsCode = 1011
+		reason = "connection is terminated"
+	}
+	return reason, wsCode, readErr
+}
+
 // OnConnect is invoked as part of the session lifecycle when a new
 // WebSocket client successfully connects.
 //
@@ -279,14 +317,13 @@ func (t *tcpClient) ReadFromServer() {
 // to the TCP server so the engine can register and track the new
 // client session.
 func (t *tcpClient) OnConnect() error {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.onConnect"
 
 	// userID originates as a string from the JWT claims but is represented
 	// as uint32 internally to avoid repeated string conversions.
 	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
 	if err != nil {
-		return errors.B(path, op, errors.Client, "faild to convert userID to int", err)
+		return errors.B(clientPath, op, errors.Client, "faild to convert userID to int", err)
 
 	}
 	pkt := &packets.ConnectPacket{
@@ -294,36 +331,34 @@ func (t *tcpClient) OnConnect() error {
 		UserID:       uint32(userIDToInt),
 	}
 	if err := t.writePacket(pkt); err != nil {
-		return errors.B(path, op, err)
+		return errors.B(clientPath, op, err)
 	}
 	return nil
 }
 
 // DisConnect is basically the inverse of OnConnect.
 func (t *tcpClient) OnDisConnect() error {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.onDisconnect"
 
 	userIDToInt, err := strconv.ParseUint(t.userID, 10, 32)
 	if err != nil {
-		return errors.B(path, op, errors.Client, "faild to convert userID to int", err)
+		return errors.B(clientPath, op, errors.Client, "faild to convert userID to int", err)
 	}
 	pkt := &packets.DisconnectPacket{
 		ConnectionID: t.connectionID,
 		UserID:       uint32(userIDToInt),
 	}
 	if err := t.writePacket(pkt); err != nil {
-		return errors.B(path, op, err)
+		return errors.B(clientPath, op, err)
 	}
 	return nil
 }
 
 func (t *tcpClient) pongRes() error {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.pongRes"
 	pkt := &packets.PongPacket{}
 	if err := t.writePacket(pkt); err != nil {
-		return errors.B(path, op, err)
+		return errors.B(clientPath, op, err)
 	}
 	return nil
 }
@@ -331,17 +366,16 @@ func (t *tcpClient) pongRes() error {
 // writePacket constructs the frame and write it
 // into the raw tcp connection
 func (t *tcpClient) writePacket(pkt packets.BuildPayload) error {
-	const path errors.PathName = "tcp/client"
 	const op errors.Op = "tcpClient.writePacket"
 	if err := t.conn.SetWriteDeadline(time.Now().Add(writeDuration)); err != nil {
-		return errors.B(path, op, "connection is unhealthy", err)
+		return errors.B(clientPath, op, "connection is unhealthy", err)
 	}
 
 	// Construct the frame, encode it, and then send it to the TCP server.
 	frame := protocol.ConstructFrame(pkt)
 	err := frame.EncodeFrame(t.conn)
 	if err != nil {
-		return errors.B(path, op, err)
+		return errors.B(clientPath, op, err)
 	}
 	return nil
 }

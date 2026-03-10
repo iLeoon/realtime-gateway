@@ -19,12 +19,10 @@ func (s *SendMessagePacket) String() string {
 }
 
 func (s *SendMessagePacket) Type() uint8 {
-	return SEND_MESSAGE
+	return SendMessage
 }
 
 func (s *SendMessagePacket) Encode() ([]byte, error) {
-	const path errors.PathName = "packets/send_message"
-	const op errors.Op = "SendMessagePacket.Encode"
 	b := make([]byte, 4+len(s.Content))
 
 	binary.BigEndian.PutUint32(b[:4], s.ConversationID)

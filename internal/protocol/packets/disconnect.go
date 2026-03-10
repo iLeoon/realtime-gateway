@@ -19,7 +19,7 @@ func (d *DisconnectPacket) String() string {
 }
 
 func (d *DisconnectPacket) Type() uint8 {
-	return DISCONNECT
+	return Disconnect
 }
 
 // Encode serializes the packet fields into a payload.

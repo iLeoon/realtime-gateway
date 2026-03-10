@@ -20,14 +20,12 @@ func (c *ConnectPacket) String() string {
 
 // Type returns the opcode.
 func (c *ConnectPacket) Type() uint8 {
-	return CONNECT
+	return Connect
 }
 
 // Encode serializes the packet fields into a payload.
 // Layout: [4 bytes ConnectionID][4 bytes UserID]
 func (c *ConnectPacket) Encode() ([]byte, error) {
-	const path errors.PathName = "packets/connect"
-	const op errors.Op = "ConnectPacket.Encode"
 	b := make([]byte, 8)
 
 	binary.BigEndian.PutUint32(b[:4], c.ConnectionID)

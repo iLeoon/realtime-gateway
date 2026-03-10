@@ -55,7 +55,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check TCP server
-	conn, err := net.DialTimeout("tcp", h.conf.TcpPort, 2*time.Second)
+	conn, err := net.DialTimeout("tcp", h.conf.TCPPort, 2*time.Second)
 	if err != nil {
 		components["tcp_server"] = componentStatus{Status: "unhealthy", Message: err.Error()}
 		healthy = false

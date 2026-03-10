@@ -1,18 +1,18 @@
 package packets
 
 const (
-	CONNECT = iota + 1
-	DISCONNECT
-	PING
-	PONG
-	SEND_MESSAGE
-	RESPONSE_MESSAGE
-	UPDATE_MESSAGE
-	UPDATE_RESPONSE
-	DELETE_MESSAGE
-	DELETE_RESPONSE
-	ERROR
-	TYPING
-	TYPING_RESPONSE
-	PRESENCE_RESPONSE
+	Connect = iota + 1
+	Disconnect
+	Ping
+	Pong
+	SendMessage
+	ResponseMessage
+	UpdateMessage
+	UpdateResponse
+	DeleteMessage
+	DeleteResponse
+	Error
+	Typing
+	TypingResponse
+	PresenceResponse
 )

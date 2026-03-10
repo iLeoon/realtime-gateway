@@ -48,21 +48,21 @@ func NewService(c *config.Config) *service {
 	}
 }
 
-func (s *service) GenerateHttpToken(userId string) (string, error) {
-	return s.EncodeToken(userId, time.Hour*24)
+func (s *service) GenerateHTTPToken(userID string) (string, error) {
+	return s.EncodeToken(userID, time.Hour*24)
 }
 
-func (s *service) GenerateWsToken(userId string) (string, error) {
-	return s.EncodeToken(userId, time.Second*60)
+func (s *service) GenerateWsToken(userID string) (string, error) {
+	return s.EncodeToken(userID, time.Second*60)
 }
 
-func (s *service) EncodeToken(userId string, duration time.Duration) (string, error) {
+func (s *service) EncodeToken(userID string, duration time.Duration) (string, error) {
 	var op errors.Op = "service.EncodeToken"
 	claims := &jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Issuer:    s.config.JwtIssuer,
-		Subject:   userId,
+		Subject:   userID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -91,7 +91,7 @@ func (s *service) DecodeToken(jwtToken string) (string, error) {
 	}
 
 	if claims.Issuer != s.config.JwtIssuer {
-		return "", errors.B(path, op, errors.Client, fmt.Errorf("invalid issuer expected: %v and recieved %v", s.config.JwtIssuer, claims.Issuer))
+		return "", errors.B(path, op, errors.Client, fmt.Errorf("invalid issuer expected: %v and received %v", s.config.JwtIssuer, claims.Issuer))
 	}
 
 	if claims.Subject == "" {
@@ -132,7 +132,7 @@ func (s *service) getGooglePublicKey(ctx context.Context) (map[string]*rsa.Publi
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
-			return nil, errors.B(path, op, errors.Client, "user cancelled the request", err)
+			return nil, errors.B(path, op, errors.Client, "user canceled the request", err)
 		case errors.Is(err, context.DeadlineExceeded):
 			return nil, errors.B(path, op, errors.TimeOut, "timeout hit when sending a request to fetch google certs", err)
 		default:
@@ -144,7 +144,7 @@ func (s *service) getGooglePublicKey(ctx context.Context) (map[string]*rsa.Publi
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
-			return nil, errors.B(path, op, errors.Client, "user cancelled the request", err)
+			return nil, errors.B(path, op, errors.Client, "user canceled the request", err)
 		case errors.Is(err, context.DeadlineExceeded):
 			return nil, errors.B(path, op, errors.TimeOut, "timeout hit when fetching google certs", err)
 		default:

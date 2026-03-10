@@ -3,8 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -18,17 +16,16 @@ import (
 )
 
 type Service interface {
-	GenerateOAuthUrl(verifier string, state string) (url string)
+	GenerateOAuthURL(verifier string, state string) (url string)
 	GoogleClient() (config *oauth2.Config)
 	HandleToken(claims *models.GoogleClaims, ctx context.Context) (u *User, a *apierror.APIError, statusCode int)
 	RequiredCookies(r *http.Request) (verifier, state *http.Cookie, err error)
 	FrontChannelError(oauthCode string) (statusCode int, a *apierror.APIError)
 	BackChannelError(err error) (statusCode int, a *apierror.APIError, error error)
-	TestLoadService(ctx context.Context, testUser ProviderIdentity) (*User, error)
 }
 
 type TokenService interface {
-	GenerateHttpToken(userId string) (httpToken string, err error)
+	GenerateHTTPToken(userID string) (httpToken string, err error)
 	DecodeGoogleToken(jwtToken string, reqContext context.Context) (*models.GoogleClaims, error)
 }
 
@@ -50,7 +47,7 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("GET /auth/login", h.Login)
 	authMux.HandleFunc("GET /auth/redirect/oauth/google/callback", h.RedirectURL)
-	authMux.HandleFunc("POST /auth/test", h.TestDBLoad)
+	// authMux.HandleFunc("POST /auth/test", h.TestDBLoad)
 	authMux.HandleFunc("POST /auth/logout", h.Logout)
 	return authMux
 
@@ -72,7 +69,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	verifier := oauth2.GenerateVerifier()
 	stateString := rand.Text()
 
-	url := h.service.GenerateOAuthUrl(verifier, stateString)
+	url := h.service.GenerateOAuthURL(verifier, stateString)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pkce_verifier",
@@ -104,7 +101,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 	if err := r.URL.Query().Get("error"); err != "" {
 		errorDes := r.URL.Query().Get("error_description")
 		statusCode, apiErr := h.service.FrontChannelError(err)
-		log.Error.Println("an error occured while the user trying to authenticate", "error_code", err, "error_description", errorDes)
+		log.Error.Println("an error occurred while the user trying to authenticate", "error_code", err, "error_description", errorDes)
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
@@ -143,13 +140,13 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.service.GoogleClient().Exchange(ctx, code, oauth2.VerifierOption(verifier.Value))
 	if err != nil {
-		statusCode, apiErr, err := h.service.BackChannelError(err)
-		log.Error.Println("unexpected error occurred", err)
+		statusCode, apiErr, backErr := h.service.BackChannelError(err)
+		log.Error.Println("unexpected error occurred", backErr)
 		apiresponse.Send(w, statusCode, apiErr)
 		return
 	}
 
-	rawIdToken, ok := token.Extra("id_token").(string)
+	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
 		log.Error.Println("expected openid in the configuration scopes")
 		apiErr := apierror.Build(apierror.InternalServerErrorCode,
@@ -159,7 +156,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := h.token.DecodeGoogleToken(rawIdToken, r.Context())
+	payload, err := h.token.DecodeGoogleToken(rawIDToken, r.Context())
 	if err != nil {
 		var errWrapper = errors.B(path, op, "faild to decode google token", err)
 		log.Error.Println(errWrapper)
@@ -195,7 +192,7 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwtToken, err := h.token.GenerateHttpToken(user.UserID)
+	jwtToken, err := h.token.GenerateHTTPToken(user.UserID)
 	if err != nil {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.FaildToGenerateToken("GeneratingHttpJwtTokenFailed"))
 		return
@@ -213,26 +210,27 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handler) TestDBLoad(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var provider ProviderIdentity
-
-	err := json.NewDecoder(r.Body).Decode(&provider)
-	if err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	user, err := h.service.TestLoadService(r.Context(), provider)
-	fmt.Println(err)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-
-	json.NewEncoder(w).Encode(map[string]string{"userId": user.UserID, "email": user.Email, "name": user.UserName})
-}
+//
+// func (h *Handler) TestDBLoad(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method != http.MethodPost {
+// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+// 	var provider ProviderIdentity
+//
+// 	err := json.NewDecoder(r.Body).Decode(&provider)
+// 	if err != nil {
+// 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+// 		return
+// 	}
+//
+// 	user, err := h.service.TestLoadService(r.Context(), provider)
+// 	fmt.Println(err)
+// 	if err != nil {
+// 		http.Error(w, "Database error", http.StatusInternalServerError)
+// 		return
+// 	}
+// 	w.Header().Set("Content-Type", "application/json")
+//
+// 	json.NewEncoder(w).Encode(map[string]string{"userId": user.UserID, "email": user.Email, "name": user.UserName})
+// }

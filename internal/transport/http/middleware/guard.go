@@ -24,7 +24,7 @@ func AuthGuard(next http.Handler, s Service) http.Handler {
 			return
 		}
 
-		userId, err := s.DecodeToken(jwtToken)
+		userID, err := s.DecodeToken(jwtToken)
 		if err != nil {
 			log.Error.Println("unexpected error while decoding token", err)
 			switch {
@@ -41,7 +41,7 @@ func AuthGuard(next http.Handler, s Service) http.Handler {
 
 		}
 
-		ctx := ctx.SetUserId(r.Context(), userId)
+		ctx := ctx.SetUserID(r.Context(), userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

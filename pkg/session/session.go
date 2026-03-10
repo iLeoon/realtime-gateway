@@ -1,4 +1,4 @@
-// Session defines the high-level connection behavior between the WebSocket
+// Package session defines the high-level connection behavior between the WebSocket
 // gateway and the TCP engine. It acts as an abstraction over the underlying
 // transporter (a TCP client) and exposes the lifecycle and message-flow
 // operations required to bridge the two systems.

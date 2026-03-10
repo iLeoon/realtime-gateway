@@ -30,7 +30,7 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	authenticatedID, ok := ctx.UserId(r.Context())
+	authenticatedID, ok := ctx.UserID(r.Context())
 	if !ok {
 		apiresponse.Send(w, http.StatusInternalServerError, apierror.MissingUserIDContext())
 		return

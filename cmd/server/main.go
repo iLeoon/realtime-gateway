@@ -23,7 +23,7 @@ func main() {
 		log.Fatal("invalid usage for log level")
 		os.Exit(1)
 	}
-	log.SetLevel(*logLevel)
+	_ = log.SetLevel(*logLevel)
 
 	// Load the configuration variables.
 	conf, err := config.Load()
@@ -54,7 +54,7 @@ func main() {
 	// and WebSocket gateway.
 	tcpFactory := tcp.NewFactory(conf, router, server)
 
-	// Retrive the handler then pass it to the http server.
+	// Retrieve the handler then pass it to the http server.
 	wsHandler := server.Handle(tcpFactory)
 
 	http.Start(conf, db, wsHandler)

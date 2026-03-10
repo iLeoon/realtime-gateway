@@ -44,7 +44,7 @@ func NewService(c *config.Config, authRepo Repository) *service {
 	}
 }
 
-func (s *service) GenerateOAuthUrl(verifier string, state string) string {
+func (s *service) GenerateOAuthURL(verifier string, state string) string {
 	url := s.GoogleClient().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	return url
 
@@ -144,20 +144,20 @@ func (s *service) BackChannelError(err error) (int, *apierror.APIError, error) {
 	switch {
 	// Check if the user was hanging for a long time or canceled the request altogether.
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
-		apiErr := apierror.Build(apierror.GatewayTimeout, "unexpected error occured",
+		apiErr := apierror.Build(apierror.GatewayTimeout, "unexpected error occurred",
 			apierror.WithTarget("token"),
 			apierror.WithInnerError("ExchangeTokenFaild"),
 		)
 		return http.StatusGatewayTimeout, apiErr, errors.B(path, op, errors.TimeOut, "waited for exchange for too long")
 	default:
 		if rErr, ok := err.(*oauth2.RetrieveError); ok {
-			apiErr := apierror.Build(apierror.BadRequestCode, "unexpected error occured",
+			apiErr := apierror.Build(apierror.BadRequestCode, "unexpected error occurred",
 				apierror.WithTarget("token"),
 				apierror.WithInnerError("ExchangeTokenFaild"),
 			)
 			return http.StatusBadRequest, apiErr, errors.B(path, op, errors.Client, fmt.Errorf("error_code:%s, error_description:%s", rErr.ErrorCode, rErr.ErrorDescription))
 		}
-		apiErr := apierror.Build(apierror.InternalServerErrorCode, "unexpected error occured",
+		apiErr := apierror.Build(apierror.InternalServerErrorCode, "unexpected error occurred",
 			apierror.WithTarget("token"),
 			apierror.WithInnerError("ExchangeTokenFaild"),
 		)
