@@ -40,7 +40,8 @@ func main() {
 	}
 
 	// Run the TCP server.
-	go tcp.Start(conf, db, tcpServerReady)
+	tcpServer := tcp.NewServer(conf, db, tcpServerReady)
+	go tcpServer.Start()
 
 	<-tcpServerReady
 
@@ -57,6 +58,6 @@ func main() {
 	// Retrieve the handler then pass it to the http server.
 	wsHandler := server.Handle(tcpFactory)
 
-	http.Start(conf, db, wsHandler)
+	http.Start(conf, db, wsHandler, tcpServer)
 
 }
