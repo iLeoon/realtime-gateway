@@ -15,4 +15,5 @@ const (
 	Typing
 	TypingResponse
 	PresenceResponse
+	AddedToConversation
 )

@@ -279,6 +279,8 @@ func (t *tcpClient) ReadFromServer() {
 			t.router.Route(pkt, t.userID, t.connectionID)
 		case *packets.ResponsePresencePacket:
 			t.router.Route(pkt, t.userID, t.connectionID)
+		case *packets.AddedToConversationPacket:
+			t.router.Route(pkt, t.userID, t.connectionID)
 		}
 		log.Info.Println("Decode packet", "packet", frame.Payload.String())
 	}

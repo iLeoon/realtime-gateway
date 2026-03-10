@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/iLeoon/realtime-gateway/internal/ctx"
+	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/resource/models"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apiresponse"
@@ -27,15 +28,22 @@ type MessageService interface {
 	FindAll(ctx context.Context, conversationID string, userID string) (ml models.MessagesList, a *apierror.APIError, statusCode int)
 }
 
+type Notifier interface {
+	AddToRoom(userID, conversationID uint32) error
+	RemoveFromRoom(userID, conversationID uint32) error
+}
+
 type Handler struct {
 	service        Service
 	messageService MessageService
+	notifier       Notifier
 }
 
-func NewHandler(s Service, ms MessageService) *Handler {
+func NewHandler(s Service, ms MessageService, notifier Notifier) *Handler {
 	return &Handler{
 		service:        s,
 		messageService: ms,
+		notifier:       notifier,
 	}
 }
 
@@ -72,7 +80,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Validate the actual request body fields
 	errDetails, err := validation.Validate(body)
 	if err != nil {
-		log.Error.Println(err)
+		log.Error.Println(errors.B(errors.PathName("conversation/controller"), errors.Op("handler.Create"), err))
 		apiresponse.Send(w, http.StatusBadRequest, apierror.Build(apierror.BadRequestCode, "failed to validate request body"))
 		return
 	}
@@ -88,7 +96,25 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := fmt.Sprintf("http://%s/api/v1.0%s", r.Host, r.URL.Path)
+	convID, _ := strconv.ParseUint(conversation.ConversationID, 10, 32)
+	creatorID, _ := strconv.ParseUint(authenticatedID, 10, 32)
+	if err := h.notifier.AddToRoom(uint32(creatorID), uint32(convID)); err != nil {
+		log.Error.Printf("failed to add creator %d to room %d: %v", creatorID, convID, err)
+	}
+	for _, id := range body.ParticipantIDs {
+		if id < 0 {
+			continue
+		}
+		if err := h.notifier.AddToRoom(uint32(id), uint32(convID)); err != nil { //nolint:gosec // participantIDs are validated positive by the request validator
+			log.Error.Printf("failed to add userID %d to room %d: %v", id, convID, err)
+		}
+	}
+
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "http"
+	}
+	path := fmt.Sprintf("%s://%s/api/v1.0%s", scheme, r.Host, r.URL.Path)
 	w.Header().Set("Location", path+"/"+conversation.ConversationID)
 	apiresponse.Send(w, http.StatusCreated, conversation)
 }
@@ -205,6 +231,16 @@ func (h *Handler) UpdateMembers(w http.ResponseWriter, r *http.Request) {
 	if apiErr != nil {
 		apiresponse.Send(w, statusCode, apiErr)
 		return
+	}
+
+	convID, _ := strconv.ParseUint(conversationID, 10, 32)
+	for _, id := range body.ParticipantIDs {
+		if id < 0 {
+			continue
+		}
+		if err := h.notifier.AddToRoom(uint32(id), uint32(convID)); err != nil { //nolint:gosec // participantIDs are validated positive by the request validator
+			log.Error.Printf("failed to add userID %d to room %d: %v", id, convID, err)
+		}
 	}
 
 	if participants.Value == nil {

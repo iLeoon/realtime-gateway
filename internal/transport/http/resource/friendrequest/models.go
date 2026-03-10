@@ -19,7 +19,7 @@ type FriendRequest struct {
 }
 
 type FriendRequestBody struct {
-	RecipientID int `json:"recipientId,string" validate:"required,gt=0"`
+	RecipientEmail string `json:"recipientEmail" validate:"required,email"`
 }
 
 type User struct {

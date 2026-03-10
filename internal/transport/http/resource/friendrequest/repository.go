@@ -28,16 +28,18 @@ func (r *repository) Create(ctx context.Context, userID string, body FriendReque
 		return nil, errors.B(path, op, errors.Client, "userID from auth context is not a valid integer")
 	}
 
-	// sender_id is always the lower ID — prevents duplicate composite-key entries.
-	senderID := min(userIDToInt, body.RecipientID)
-	recipientID := max(userIDToInt, body.RecipientID)
-
+	// Resolve recipient email to user_id and insert in one round-trip.
+	// LEAST/GREATEST normalises sender_id/recipient_id so (a,b) and (b,a) map to the same row, preventing duplicate composite-key entries.
 	fr := &FriendRequest{}
-	err = r.db.QueryRow(ctx,
-		`INSERT INTO friends (sender_id, recipient_id, author_id, status)
-		 VALUES ($1, $2, $3, 'pending')
-		 RETURNING sender_id, recipient_id, author_id, status, created_at`,
-		senderID, recipientID, userIDToInt,
+	err = r.db.QueryRow(ctx, `
+                WITH recipient AS (
+                        SELECT user_id FROM users WHERE email = $1 LIMIT 1
+                )
+                INSERT INTO friends (sender_id, recipient_id, author_id, status)
+                SELECT LEAST($2, recipient.user_id), GREATEST($2, recipient.user_id), $2, 'pending'
+                FROM recipient
+                RETURNING sender_id, recipient_id, author_id, status, created_at`,
+		body.RecipientEmail, userIDToInt,
 	).Scan(&fr.SenderID, &fr.RecipientID, &fr.AuthorID, &fr.Status, &fr.CreatedAt)
 	if err != nil {
 		return nil, apierror.DatabaseErrorClassification(path, op, err)
@@ -49,16 +51,16 @@ func (r *repository) Create(ctx context.Context, userID string, body FriendReque
 // friendRequestListQuery is the shared JOIN used by both list queries.
 // The caller supplies the WHERE clause via the filter argument.
 const friendRequestListQuery = `
-	SELECT
-		s.user_id,  s.username,  s.email,  COALESCE(s.avatar_url, ''),
-		rc.user_id, rc.username, rc.email, COALESCE(rc.avatar_url, ''),
-		a.user_id,  a.username,  a.email,  COALESCE(a.avatar_url, ''),
-		f.status,
-		f.created_at
-	FROM friends f
-	JOIN users s  ON s.user_id  = f.sender_id
-	JOIN users rc ON rc.user_id = f.recipient_id
-	JOIN users a  ON a.user_id  = f.author_id
+        SELECT
+                s.user_id,  s.username,  s.email,  COALESCE(s.avatar_url, ''),
+                rc.user_id, rc.username, rc.email, COALESCE(rc.avatar_url, ''),
+                a.user_id,  a.username,  a.email,  COALESCE(a.avatar_url, ''),
+                f.status,
+                f.created_at
+        FROM friends f
+        JOIN users s  ON s.user_id  = f.sender_id
+        JOIN users rc ON rc.user_id = f.recipient_id
+        JOIN users a  ON a.user_id  = f.author_id
 `
 
 func scanFriendRequestList(rows pgx.Rows, path errors.PathName, op errors.Op) (FriendRequestList, error) {
@@ -103,8 +105,8 @@ func (r *repository) FindReceivedRequests(ctx context.Context, userID string) (F
 
 	rows, err := r.db.Query(ctx,
 		friendRequestListQuery+`
-		WHERE f.author_id != $1
-		  AND (f.sender_id = $1 OR f.recipient_id = $1) AND status = 'pending'`,
+                WHERE f.author_id != $1
+                  AND (f.sender_id = $1 OR f.recipient_id = $1) AND status = 'pending'`,
 		userID)
 	if err != nil {
 		return FriendRequestList{}, apierror.DatabaseErrorClassification(path, op, err)
@@ -129,7 +131,7 @@ func (r *repository) AcceptRequest(ctx context.Context, userID string, authorID 
 
 	tag, err := r.db.Exec(ctx,
 		`UPDATE friends SET status = 'accepted'
-		 WHERE sender_id = $1 AND recipient_id = $2 AND author_id = $3 AND status = 'pending'`,
+                 WHERE sender_id = $1 AND recipient_id = $2 AND author_id = $3 AND status = 'pending'`,
 		senderID, recipientID, authorIDInt)
 
 	if err != nil {
@@ -159,7 +161,7 @@ func (r *repository) CancelSentRequest(ctx context.Context, authorID string, tar
 
 	tag, err := r.db.Exec(ctx,
 		`DELETE FROM friends
-		 WHERE sender_id = $1 AND recipient_id = $2 AND author_id = $3`,
+                 WHERE sender_id = $1 AND recipient_id = $2 AND author_id = $3`,
 		senderID, recipientID, authorIDInt)
 	if err != nil {
 		return apierror.DatabaseErrorClassification(path, op, err)
@@ -187,7 +189,7 @@ func (r *repository) DeclineReceivedRequest(ctx context.Context, userID string, 
 
 	tag, err := r.db.Exec(ctx,
 		`DELETE FROM friends
-		 WHERE sender_id = $1 AND recipient_id = $2 AND author_id != $3`,
+                 WHERE sender_id = $1 AND recipient_id = $2 AND author_id != $3`,
 		senderID, recipientID, userIDInt)
 	if err != nil {
 		return apierror.DatabaseErrorClassification(path, op, err)

@@ -44,6 +44,8 @@ func (r *router) Route(pkt packets.BuildPayload, userID string, connectionID uin
 		r.handleResponseTyping(p, userID, connectionID)
 	case *packets.ResponsePresencePacket:
 		r.handleResponsePresence(p, userID, connectionID)
+	case *packets.AddedToConversationPacket:
+		r.handleAddedToConversation(p, userID, connectionID)
 	default:
 	}
 }
@@ -128,7 +130,23 @@ func (r *router) handleResponseDeleteMessage(pkt *packets.ResponseDeleteMessageP
 	}
 }
 
-// handleResponsePresence delivers a presence notification to its intended WebSocket recipient.
+// handleAddedToConversation notifies the WebSocket client that they were
+// added to a new conversation. The frontend should fetch GET /conversations/{id}.
+func (r *router) handleAddedToConversation(pkt *packets.AddedToConversationPacket, userID string, connectionID uint32) {
+	res := AddedToConversation{
+		ConversationID: pkt.ConversationID,
+	}
+	payload, err := json.Marshal(res)
+	if err != nil {
+		log.Error.Printf("failed to encode added_to_conversation packet: %v to json", pkt)
+		return
+	}
+
+	if err := r.router.Send(userID, connectionID, payload); err != nil {
+		log.Error.Println("couldn't find the client", "error", err)
+		return
+	}
+}
 func (r *router) handleResponsePresence(pkt *packets.ResponsePresencePacket, userID string, connectionID uint32) {
 	res := ResponsePresence{
 		UserID:   fmt.Sprintf("%d", pkt.UserID),

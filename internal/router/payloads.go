@@ -32,3 +32,7 @@ type ResponsePresence struct {
 	UserID   string `json:"userID"`
 	IsOnline bool   `json:"isOnline"`
 }
+
+type AddedToConversation struct {
+	ConversationID uint32 `json:"conversationID"`
+}

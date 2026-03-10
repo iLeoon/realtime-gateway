@@ -15,6 +15,7 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/protocol/packets"
 	"github.com/iLeoon/realtime-gateway/internal/transport/tcp/worker"
 	"github.com/iLeoon/realtime-gateway/pkg/log"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,7 +32,6 @@ type server struct {
 	clients           map[uint32][]uint32            // userID        → []connectionID
 	userConversations map[uint32]map[uint32]struct{} // userID        → set of conversationIDs
 	roomManager       map[uint32]map[uint32]struct{} // conversationID → set of memberIDs
-	userID            uint32
 	ready             chan<- struct{}
 	mu                sync.RWMutex
 	messagesCh        chan worker.Message
@@ -51,8 +51,8 @@ type FanOut struct {
 	userID       uint32
 }
 
-// Start starts a new instance of the TCP server.
-func Start(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) {
+// NewServer creates a new tcp server instance
+func NewServer(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) *server {
 	server := &server{
 		conf:              c,
 		db:                db,
@@ -65,8 +65,13 @@ func Start(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) {
 		messagesCh:        make(chan worker.Message, 200),
 	}
 
-	worker.New(server.done, server.messagesCh, server.db)
-	server.listen()
+	return server
+}
+
+// Start starts a new instance of the TCP server.
+func (s *server) Start() {
+	worker.New(s.done, s.messagesCh, s.db)
+	s.listen()
 }
 
 // Lanunches the server, this method must be invoked inside a separate
@@ -109,6 +114,7 @@ func (s *server) handleConn(conn net.Conn) {
 	}()
 	go s.pingReq(conn, stopPing)
 
+	var userID uint32
 	for {
 		if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 			wrappedErr := errors.B(path, op, err)
@@ -120,69 +126,72 @@ func (s *server) handleConn(conn net.Conn) {
 		frame, err := protocol.DecodeFrame(conn)
 		if err != nil {
 			readErr := s.handleDecodeErr(err, op, conn)
-			// wrappedErr gives more context to the rest of the logs
 			wrappedErr := errors.B(path, op, readErr, err)
 			log.Error.Println(wrappedErr)
+			return
 		}
 
 		// packtDispatcher routes the frame to it's appropriate handler.
 		// uses a type assertion to convert the generic BuildPayload interface into
 		// its concrete *packet type
-		s.packetsDispatcher(frame, conn)
+		if !s.packetsDispatcher(frame, conn, &userID) {
+			return
+		}
 	}
 }
 
-func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn) {
+func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn, userID *uint32) bool {
 	switch p := frame.Payload.(type) {
 	case *packets.ConnectPacket:
-		s.userID = p.UserID
+		*userID = p.UserID
 		err := s.register(p, conn)
 		if err != nil {
 			log.Error.Println("processing connect packet failed", err)
 			s.handleErrorPacket(err, conn)
-			return
+			return true
 		}
 	case *packets.DisconnectPacket:
 		log.Info.Println("Decode packet", "packet", p.String())
 		s.unregister(p)
-		return
+		return false // signal handleConn to exit and fire its defer
 
 	case *packets.SendMessagePacket:
-		err := s.handleSendMessageReq(p, s.userID)
+		err := s.handleSendMessageReq(p, *userID)
 		if err != nil {
 			log.Error.Println("processing send message packet", err)
 			s.handleErrorPacket(err, conn)
-			return
+			return true
 		}
 	case *packets.PongPacket:
 		// We don't do anything we just renter the loop.
 	case *packets.UpdateMessagePacket:
-		err := s.handleUpdateMessagePacket(p, s.userID)
+		err := s.handleUpdateMessagePacket(p, *userID)
 		if err != nil {
 			log.Error.Println("processing update message packet failed", err)
 			s.handleErrorPacket(err, conn)
-			return
+			return true
 		}
 	case *packets.DeleteMessagePacket:
-		err := s.handleDeleteMessagePacket(p, s.userID)
+		err := s.handleDeleteMessagePacket(p, *userID)
 		if err != nil {
 			log.Error.Println("processing update message packet failed", err)
 			s.handleErrorPacket(err, conn)
-			return
+			return true
 		}
 
 	case *packets.TypingPacket:
-		err := s.handleTypingPacket(p, s.userID)
+		err := s.handleTypingPacket(p, *userID)
 		if err != nil {
 			log.Error.Println("processing typing packet failed", err)
 			s.handleErrorPacket(err, conn)
-			return
+			return true
 		}
 	default:
 		log.Error.Printf("invalid packet type from gateway: %T", p)
-		return
+		return true
 	}
 	log.Info.Println("Decode packet", "packet", frame.Payload.String())
+	return true
 }
 
 func (s *server) handleDecodeErr(err error, op errors.Op, conn net.Conn) error {
@@ -237,9 +246,8 @@ func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uin
 	}
 
 	// Pre-fetch the next message_id from Postgres sequence before fan-out.
-	// This is a lightweight counter read (no table lock, no write) that lets us
-	// include the real DB-assigned ID in the ResponseMessagePacket immediately,
-	// while the actual INSERT remains async in the worker pool.
+	// This is a lightweight counter read that lets us
+	// include the real DB-assigned ID in the ResponseMessagePacket immediately.
 	var messageID uint32
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -303,6 +311,9 @@ func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, use
 	if allowed := s.isAllowed(userID, pkt.ConversationID); !allowed {
 		return errors.B(path, op, errors.Client, fmt.Errorf("the userID %v is not allowed to send messages in conversationID %v", userID, pkt.ConversationID))
 	}
+	if err := s.verifyMessageAuthor(pkt.MessageID, userID); err != nil {
+		return errors.B(path, op, err)
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -355,6 +366,9 @@ func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, use
 	}
 	if allowed := s.isAllowed(userID, pkt.ConversationID); !allowed {
 		return errors.B(path, op, errors.Client, fmt.Errorf("the userID %v is not allowed to send messages in conversationID %v", userID, pkt.ConversationID))
+	}
+	if err := s.verifyMessageAuthor(pkt.MessageID, userID); err != nil {
+		return errors.B(path, op, err)
 	}
 
 	s.mu.RLock()
@@ -446,6 +460,79 @@ func (s *server) isAllowed(userID uint32, conversationID uint32) bool {
 		return allowed
 	}
 	return false
+}
+
+// AddToRoom updates the in-memory maps so a user immediately starts
+// receiving messages for the conversation they were just added to.
+func (s *server) AddToRoom(userID, conversationID uint32) error {
+	s.mu.Lock()
+
+	if s.userConversations[userID] == nil {
+		s.userConversations[userID] = make(map[uint32]struct{})
+	}
+	s.userConversations[userID][conversationID] = struct{}{}
+	if s.roomManager[conversationID] == nil {
+		s.roomManager[conversationID] = make(map[uint32]struct{})
+	}
+	s.roomManager[conversationID][userID] = struct{}{}
+
+	// Collect the user's active connections while still under the lock.
+	var conns []net.Conn
+	for _, connID := range s.clients[userID] {
+		if conn, ok := s.connections[connID]; ok {
+			conns = append(conns, conn)
+		}
+	}
+	s.mu.Unlock()
+
+	pkt := &packets.AddedToConversationPacket{ConversationID: conversationID}
+	for _, conn := range conns {
+		if err := s.writePacket(pkt, conn); err != nil {
+			log.Error.Printf("failed to notify userID %d of new conversation %d: %v", userID, conversationID, err)
+		}
+	}
+	return nil
+}
+
+// RemoveFromRoom removes a user from the in-memory maps for a conversation.
+func (s *server) RemoveFromRoom(userID, conversationID uint32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if convs, ok := s.userConversations[userID]; ok {
+		delete(convs, conversationID)
+	}
+	if members, ok := s.roomManager[conversationID]; ok {
+		delete(members, userID)
+		if len(members) == 0 {
+			delete(s.roomManager, conversationID)
+		}
+	}
+	return nil
+}
+
+// verifyMessageAuthor checks that messageID was authored by userID.
+// Returns a client error if the message doesn't exist or belongs to someone else.
+func (s *server) verifyMessageAuthor(messageID uint32, userID uint32) error {
+	const op errors.Op = "server.verifyMessageAuthor"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var authorID uint32
+	err := s.db.QueryRow(ctx,
+		`SELECT creator_id FROM messages WHERE message_id = $1`,
+		messageID,
+	).Scan(&authorID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.B(path, op, errors.Client, fmt.Errorf("messageID %v does not exist", messageID))
+		}
+		return errors.B(path, op, errors.Internal, fmt.Errorf("failed to verify message author: %w", err))
+	}
+	if authorID != userID {
+		return errors.B(path, op, errors.Client, fmt.Errorf("userID %v is not the author of messageID %v", userID, messageID))
+	}
+	return nil
 }
 
 func (s *server) pingReq(conn net.Conn, stop <-chan struct{}) {

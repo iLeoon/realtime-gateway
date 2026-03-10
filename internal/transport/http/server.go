@@ -21,7 +21,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
+type Notifier interface {
+	AddToRoom(userID, conversationID uint32) error
+	RemoveFromRoom(userID, conversationID uint32) error
+}
+
+func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler, tcpServer Notifier) {
 	rootMux := http.NewServeMux()
 
 	// Initializing the validator
@@ -52,7 +57,7 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 
 	convRepo := conversation.NewRepo(db)
 	convServ := conversation.NewService(convRepo)
-	convHandler := conversation.NewHandler(convServ, msgServ)
+	convHandler := conversation.NewHandler(convServ, msgServ, tcpServer)
 
 	frRepo := friendrequest.NewRepo(db)
 	frServ := friendrequest.NewService(frRepo)
@@ -75,8 +80,8 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler) {
 	rootMux.Handle("/conversations/", middleware.AuthGuard(convMux, jwtService))
 	rootMux.Handle("/conversations", middleware.AuthGuard(convMux, jwtService))
 
-	rootMux.Handle("/friendrequests/", middleware.AuthGuard(frMux, jwtService))
-	rootMux.Handle("/friendrequests", middleware.AuthGuard(frMux, jwtService))
+	rootMux.Handle("/friendrequests/", middleware.AuthGuard(middleware.RateLimiter(frMux, rl), jwtService))
+	rootMux.Handle("/friendrequests", middleware.AuthGuard(middleware.RateLimiter(frMux, rl), jwtService))
 
 	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
 	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))

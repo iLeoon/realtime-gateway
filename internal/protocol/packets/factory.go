@@ -40,6 +40,8 @@ func ConstructPacket(ope uint8) (BuildPayload, error) {
 		return &ResponseTypingPacket{}, nil
 	case PresenceResponse:
 		return &ResponsePresencePacket{}, nil
+	case AddedToConversation:
+		return &AddedToConversationPacket{}, nil
 	}
 
 	return nil, errors.B(path, op, errors.Internal, "unknown packet type")
