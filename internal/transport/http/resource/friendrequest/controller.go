@@ -77,7 +77,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := fmt.Sprintf("http://%s/api/v1.0%s", r.Host, r.URL.Path)
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "http"
+	}
+	path := fmt.Sprintf("%s://%s/api/v1.0%s", scheme, r.Host, r.URL.Path)
 	w.Header().Set("Location", path+"/"+fr.RecipientID)
 	apiresponse.Send(w, http.StatusCreated, fr)
 }

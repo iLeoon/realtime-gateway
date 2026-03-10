@@ -76,7 +76,11 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			return s.c.FrontEndOrigin == r.Header.Get("Origin")
+			origin := r.Header.Get("Origin")
+			if s.c.IsProduction() {
+				return s.c.FrontEndOriginProd == origin
+			}
+			return s.c.FrontEndOriginDev == origin || s.c.FrontEndOriginProd == origin
 		},
 	}
 	var b [4]byte
@@ -212,6 +216,10 @@ func (s *server) removeConnections(clients []Client, target uint32) []Client {
 
 func (s *server) removeClient(c *client) {
 	s.mu.Lock()
+	if c.idleElement != nil {
+		s.idleList.Remove(c.idleElement)
+		c.idleElement = nil
+	}
 	clients := s.removeConnections(s.clients[c.userID], c.connectionID)
 	if len(clients) == 0 {
 		delete(s.clients, c.userID)

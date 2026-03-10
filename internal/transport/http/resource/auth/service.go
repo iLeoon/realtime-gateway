@@ -30,13 +30,17 @@ type service struct {
 }
 
 func NewService(c *config.Config, authRepo Repository) *service {
+	redirectURL := c.RedirectURLProd
+	if !c.IsProduction() {
+		redirectURL = c.RedirectURLDev
+	}
 	return &service{
 		config: c,
 		repo:   authRepo,
 		oauthConfig: &oauth2.Config{
 			ClientID:     c.GoogleClientID,
 			ClientSecret: c.GoogleClientSecret,
-			RedirectURL:  c.RedirectURL,
+			RedirectURL:  redirectURL,
 			Scopes:       []string{"openid", "email", "profile"},
 			Endpoint:     google.Endpoint,
 		},

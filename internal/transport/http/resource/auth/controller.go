@@ -43,22 +43,31 @@ func NewHandler(s Service, t TokenService, c *config.Config) *Handler {
 	}
 }
 
+func (h *Handler) cookieOpts() (sameSite http.SameSite, secure bool) {
+	if h.config.IsProduction() {
+		return http.SameSiteNoneMode, true
+	}
+	return http.SameSiteLaxMode, false
+}
+
 func (h *Handler) RegisterRoutes() *http.ServeMux {
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("GET /auth/login", h.Login)
 	authMux.HandleFunc("GET /auth/redirect/oauth/google/callback", h.RedirectURL)
-	// authMux.HandleFunc("POST /auth/test", h.TestDBLoad)
 	authMux.HandleFunc("POST /auth/logout", h.Logout)
 	return authMux
 
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	sameSite, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
+		Domain:   ".realtimegateway.me",
 		Value:    "",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
+		SameSite: sameSite,
 		Path:     "/",
 		MaxAge:   -1,
 	})
@@ -71,22 +80,27 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	url := h.service.GenerateOAuthURL(verifier, stateString)
 
+	sameSite, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pkce_verifier",
+		Domain:   ".realtimegateway.me",
 		HttpOnly: true,
+		Secure:   secure,
 		Value:    verifier,
 		Path:     "/",
 		MaxAge:   0,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "state",
+		Domain:   ".realtimegateway.me",
 		HttpOnly: true,
+		Secure:   secure,
 		Value:    stateString,
 		Path:     "/",
 		MaxAge:   0,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 	})
 
 	http.Redirect(w, r, url, http.StatusFound)
@@ -198,39 +212,18 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sameSite, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
+		Domain:   ".realtimegateway.me",
 		Value:    jwtToken,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
+		SameSite: sameSite,
 		Path:     "/",
 		MaxAge:   3600,
 	})
-	http.Redirect(w, r, h.config.FrontEndOrigin+"/chat", http.StatusFound)
+	http.Redirect(w, r, h.config.FrontEndOrigin()+"/chat", http.StatusFound)
 
 }
 
-//
-// func (h *Handler) TestDBLoad(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != http.MethodPost {
-// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-// 	var provider ProviderIdentity
-//
-// 	err := json.NewDecoder(r.Body).Decode(&provider)
-// 	if err != nil {
-// 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-// 		return
-// 	}
-//
-// 	user, err := h.service.TestLoadService(r.Context(), provider)
-// 	fmt.Println(err)
-// 	if err != nil {
-// 		http.Error(w, "Database error", http.StatusInternalServerError)
-// 		return
-// 	}
-// 	w.Header().Set("Content-Type", "application/json")
-//
-// 	json.NewEncoder(w).Encode(map[string]string{"userId": user.UserID, "email": user.Email, "name": user.UserName})
-// }
