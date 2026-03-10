@@ -17,7 +17,7 @@ post:
         schema:
           $ref: ../components/friendrequest.yml#/FriendRequestBody
         example:
-          recipientId: "4"
+          recipientEmail: "friend@gmail.com"
   responses:
     "201":
       description: Friend request created successfully
@@ -41,7 +41,7 @@ post:
     "400":
       description: >
         Invalid request body, unknown fields, duplicate friend request,
-        recipient does not exist, or malformed Authorization header
+        or malformed Authorization header
       content:
         application/json:
           schema:
@@ -57,16 +57,16 @@ post:
                   innererror:
                     code: InvalidFieldDataTypeOrInvalidJSONFormat
             validationError:
-              summary: recipientId missing or not a positive integer
+              summary: recipientEmail missing or not a valid email address
               value:
                 error:
                   code: BadArgumet
                   message: invalid argument
                   target: FriendRequestBody
                   details:
-                    - code: required
-                      target: recipientId
-                      message: recipientId is a required field
+                    - code: email
+                      target: recipientEmail
+                      message: recipientEmail must be a valid email address
             duplicateRequest:
               summary: A friend request between these two users already exists
               value:
@@ -96,6 +96,39 @@ post:
                   target: header
                   innererror:
                     code: InvalidHeaderFormat
+
+    "404":
+      description: No user found with the given email address
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: NotFound
+              message: resource not found
+              target: friendRequest
+              innererror:
+                code: ResourceNotFound
+
+    "429":
+      description: Too many requests — rate limit exceeded for this IP and endpoint
+      headers:
+        Retry-After:
+          description: Duration to wait before retrying (e.g. "2s", "30s")
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: RateLimit
+              message: too many requests
+              target: ip
+              innererror:
+                code: RateLimitExceeded
 
     "401":
       description: JWT is invalid or expired

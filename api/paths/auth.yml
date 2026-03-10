@@ -21,3 +21,22 @@ get:
             Both are HttpOnly and protect the authentication flow.
           schema:
             type: string
+
+    "429":
+      description: Too many requests — rate limit exceeded for this IP
+      headers:
+        Retry-After:
+          description: Duration to wait before retrying (e.g. "2s", "30s")
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: ../components/error.yml#/Error
+          example:
+            error:
+              code: RateLimit
+              message: too many requests
+              target: ip
+              innererror:
+                code: RateLimitExceeded

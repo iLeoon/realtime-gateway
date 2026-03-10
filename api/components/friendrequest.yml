@@ -95,9 +95,10 @@ FriendRequestList:
 FriendRequestBody:
   type: object
   required:
-    - recipientId
+    - recipientEmail
   properties:
-    recipientId:
+    recipientEmail:
       type: string
-      description: ID of the user to send the friend request to (sent as a quoted string per API guidelines)
-      example: "4"
+      format: email
+      description: Email address of the user to send the friend request to
+      example: "friend@gmail.com"
