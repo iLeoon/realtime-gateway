@@ -1,0 +1,57 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  enable:
+    - gocyclo
+    - goconst
+    - gocognit
+    - misspell
+    - gosec
+    - unconvert
+    - unparam
+    - errcheck
+    - govet
+    - staticcheck
+  settings:
+    gocyclo:
+      min-complexity: 15
+    goconst:
+      match-constant: true
+      min-len: 3
+      min-occurrences: 2
+      numbers: true
+      min: 3
+      find-duplicates: true
+    gocognit:
+      min-complexity: 20
+    misspell:
+      locale: US
+      mode: default
+    gosec:
+      severity: medium
+      confidence: medium
+      config:
+        audit: true
+    unparam:
+      check-exported: true
+    errcheck:
+      check-type-assertions: true
+      verbose: true
+      exclude-functions:
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (io.Closer).Close
+        - (*github.com/gorilla/websocket.Conn).Close
+    staticcheck:
+      checks: ["all", "-ST1000"]
+    govet:
+      enable:
+        - shadow
+        - nilness
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - errcheck

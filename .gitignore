@@ -1,6 +1,6 @@
 .env
 .git
-.github
+.github/agents
 
 bin/
 web/
