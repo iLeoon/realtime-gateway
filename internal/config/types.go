@@ -15,12 +15,26 @@ type TCP struct {
 
 type HTTPServer struct {
 	HTTPPort string `env:"HTTP_PORT,required"`
+	Env      string `env:"APP_ENV,required"`
+}
+
+func (h HTTPServer) IsProduction() bool {
+	return h.Env == "production"
+}
+
+// FrontEndOrigin returns the active frontend origin based on the current environment.
+func (c *Config) FrontEndOrigin() string {
+	if c.IsProduction() {
+		return c.FrontEndOriginProd
+	}
+	return c.FrontEndOriginDev
 }
 
 type GoogleOAuth struct {
 	GoogleClientID     string `env:"GOOGLE_CLIENT_ID,required"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,required"`
-	RedirectURL        string `env:"REDIRECT_URL,required"`
+	RedirectURLDev     string `env:"REDIRECT_URL_DEV"`
+	RedirectURLProd    string `env:"REDIRECT_URL_PRODUCTION"`
 }
 
 type PostgreSQL struct {
@@ -40,5 +54,6 @@ type JWT struct {
 }
 
 type CORS struct {
-	FrontEndOrigin string `env:"FRONTEND_ORIGIN,required"`
+	FrontEndOriginDev  string `env:"FRONTEND_ORIGIN_DEV"`
+	FrontEndOriginProd string `env:"FRONTEND_ORIGIN_PRODUCTION"`
 }
