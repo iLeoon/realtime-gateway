@@ -13,7 +13,7 @@ import (
 )
 
 // startTestServer spins up a minimal TCP listener that mirrors the real
-// server's behaviour: it decodes one frame per connection and writes back
+// server's behavior: it decodes one frame per connection and writes back
 // an ErrorPacket on any client-side decode error.
 func startTestServer(t *testing.T) string {
 	t.Helper()
