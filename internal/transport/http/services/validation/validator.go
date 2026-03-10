@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/iLeoon/realtime-gateway/internal/errors"
 	"github.com/iLeoon/realtime-gateway/internal/transport/http/services/apierror"
 )
 
@@ -32,18 +31,11 @@ func Init(validator *validator.Validate) {
 }
 
 func Validate(data interface{}) ([]apierror.ErrorDetails, error) {
-	const path errors.PathName = "validation/validator"
-	const op errors.Op = "validate"
 	err := v.Struct(data)
 	if err == nil {
-		return nil, errors.B(path, op, "failed to validate struct field", err)
+		return nil, nil
 	}
-	errs, ok := err.(validator.ValidationErrors)
-	if !ok {
-		return nil, errors.B(path, op, "error passed is a validation error")
-
-	}
-	errDetails := buildErrValidationMessage(errs)
+	errDetails := buildErrValidationMessage(err.(validator.ValidationErrors))
 	return errDetails, nil
 }
 

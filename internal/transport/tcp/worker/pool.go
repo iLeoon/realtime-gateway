@@ -60,7 +60,9 @@ func handleTask(task TaskType, db *pgxpool.Pool, message Message) {
 	case Delete:
 		err = delete(db, message)
 	}
-	log.Error.Printf("failed to process %v message: %v", message, err)
+	if err != nil {
+		log.Error.Printf("failed to process %v message: %v", message, err)
+	}
 }
 
 func store(db *pgxpool.Pool, m Message) error {
