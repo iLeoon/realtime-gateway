@@ -55,7 +55,7 @@ The gateway and engine communicate using a compact binary frame format
 (Magic + Opcode + Length + Payload).  
 This protocol is documented thoroughly in:
 
-👉 **[`PROTOCOL.md`](./pkg/protocol/PROTOCOL.md)**
+👉 **[`PROTOCOL.md`](./internal/protocol/PROTOCOL.md)**
 
 The README gives only the high-level view — all encoding, decoding, and byte-level
 details remain in the protocol document.
