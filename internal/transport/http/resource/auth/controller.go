@@ -17,11 +17,11 @@ import (
 
 type Service interface {
 	GenerateOAuthURL(verifier string, state string) (url string)
-	GoogleClient() (config *oauth2.Config)
-	HandleToken(claims *models.GoogleClaims, ctx context.Context) (u *User, a *apierror.APIError, statusCode int)
-	RequiredCookies(r *http.Request) (verifier, state *http.Cookie, err error)
-	FrontChannelError(oauthCode string) (statusCode int, a *apierror.APIError)
-	BackChannelError(err error) (statusCode int, a *apierror.APIError, error error)
+	GoogleClient() *oauth2.Config
+	HandleToken(*models.GoogleClaims, context.Context) (*User, *apierror.APIError, int)
+	RequiredCookies(*http.Request) (*http.Cookie, *http.Cookie, error)
+	FrontChannelError(oauthCode string) (int, *apierror.APIError)
+	BackChannelError(error) (int, *apierror.APIError, error)
 }
 
 type TokenService interface {
@@ -43,11 +43,12 @@ func NewHandler(s Service, t TokenService, c *config.Config) *Handler {
 	}
 }
 
-func (h *Handler) cookieOpts() (sameSite http.SameSite, secure bool) {
+// cookieOpts switches between the env variables
+func (h *Handler) cookieOpts() (http.SameSite, string, bool) {
 	if h.config.IsProduction() {
-		return http.SameSiteNoneMode, true
+		return http.SameSiteNoneMode, ".realtimegateway.me", true
 	}
-	return http.SameSiteLaxMode, false
+	return http.SameSiteLaxMode, "", false
 }
 
 func (h *Handler) RegisterRoutes() *http.ServeMux {
@@ -60,10 +61,10 @@ func (h *Handler) RegisterRoutes() *http.ServeMux {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	sameSite, secure := h.cookieOpts()
+	sameSite, domain, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
-		Domain:   ".realtimegateway.me",
+		Domain:   domain,
 		Value:    "",
 		HttpOnly: true,
 		Secure:   secure,
@@ -80,10 +81,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	url := h.service.GenerateOAuthURL(verifier, stateString)
 
-	sameSite, secure := h.cookieOpts()
+	sameSite, domian, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pkce_verifier",
-		Domain:   ".realtimegateway.me",
+		Domain:   domian,
 		HttpOnly: true,
 		Secure:   secure,
 		Value:    verifier,
@@ -94,7 +95,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "state",
-		Domain:   ".realtimegateway.me",
+		Domain:   domian,
 		HttpOnly: true,
 		Secure:   secure,
 		Value:    stateString,
@@ -212,10 +213,10 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sameSite, secure := h.cookieOpts()
+	sameSite, domain, secure := h.cookieOpts()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
-		Domain:   ".realtimegateway.me",
+		Domain:   domain,
 		Value:    jwtToken,
 		HttpOnly: true,
 		Secure:   secure,
@@ -223,7 +224,6 @@ func (h *Handler) RedirectURL(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   3600,
 	})
-	http.Redirect(w, r, h.config.FrontEndOrigin()+"/chat", http.StatusFound)
+	http.Redirect(w, r, h.config.Cors+"/chat", http.StatusFound)
 
 }
-

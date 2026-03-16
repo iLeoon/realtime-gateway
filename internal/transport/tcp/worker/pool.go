@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/iLeoon/realtime-gateway/internal/errors"
@@ -31,7 +32,8 @@ type Message struct {
 }
 
 func New(done <-chan struct{}, messagesCh <-chan Message, db *pgxpool.Pool) {
-	for i := 0; i < 2; i++ {
+	var workers = runtime.NumCPU()
+	for i := 0; i < workers*2; i++ {
 		go worker(db, done, messagesCh)
 	}
 }

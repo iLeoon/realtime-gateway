@@ -19,16 +19,12 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		port     = conf.DBPort
 		user     = conf.DBUser
 		password = conf.DBPassword
-		dbname   = conf.DBName
+		dbName   = conf.DBName
 	)
 
-	if conf.DatabaseURL != "" {
-		psqlInfo = conf.DatabaseURL
-	} else {
-		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s "+
-			"password=%s dbname=%s sslmode=disable",
-			host, port, user, password, dbname)
-	}
+	psqlInfo = fmt.Sprintf("host=%s port=%d user=%s "+
+		"password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbName)
 
 	parseConfig, parseErr := pgxpool.ParseConfig(psqlInfo)
 	if parseErr != nil {
@@ -53,7 +49,7 @@ func Connect(conf *config.Config) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
-	log.Info.Println("Database connection is ready..")
+	log.Info.Printf("DBName: %q, message: Database connection is ready..\n", conf.DBName)
 
 	s := pool.Stat()
 

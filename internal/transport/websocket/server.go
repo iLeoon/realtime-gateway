@@ -60,10 +60,11 @@ func New(c *config.Config) *server {
 
 // Handle constructs and returns an http handler responsible for handling
 // webSocket requests then pass it to start
-func (s *server) Handle(tcp session.InitiateSession) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (s *server) Handle(tcp session.InitiateSession) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
 		s.Start(w, r, tcp)
-	})
+	}
 }
 
 // Start upgrades the incoming HTTP request to a WebSocket
@@ -77,10 +78,7 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
-			if s.c.IsProduction() {
-				return s.c.FrontEndOriginProd == origin
-			}
-			return s.c.FrontEndOriginDev == origin || s.c.FrontEndOriginProd == origin
+			return s.c.Cors == origin
 		},
 	}
 	var b [4]byte
@@ -91,22 +89,21 @@ func (s *server) Start(w http.ResponseWriter, r *http.Request, session session.I
 	connectionID := binary.LittleEndian.Uint32(b[:])
 
 	userID, ok := ctx.UserID(r.Context())
-
 	if !ok {
-		log.Error.Println("Couldn't extract the ID from the request")
+		log.Error.Println("couldn't extract the ID from the request")
 		return
 	}
 
 	// upgrade the websocket connection.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error.Println("Error on upgrading raw tcp connection into websocekt", "Error", err)
+		log.Error.Println("error on upgrading raw tcp connection into websocekt", err)
 		return
 	}
 
 	tcpClient, err := session.NewClient(userID, connectionID)
 	if err != nil {
-		log.Error.Println("Error on initializing a new tcp client for the connection between websocket and tcp server")
+		log.Error.Println("error on initializing a new tcp client for the connection between websocket and tcp server")
 		conn.Close()
 		return
 	}

@@ -6,10 +6,9 @@ import (
 	"github.com/iLeoon/realtime-gateway/internal/config"
 )
 
-func Cors(next http.Handler, config *config.Config) http.Handler {
-	allowedOrigin := config.FrontEndOrigin()
+func Cors(next http.Handler, c *config.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Access-Control-Allow-Origin", c.Cors)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == http.MethodOptions {
