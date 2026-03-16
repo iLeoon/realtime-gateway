@@ -1,0 +1,107 @@
+<svg width="1000" height="600" viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background and Styles -->
+  <rect width="1000" height="600" fill="#0f172a" rx="10" />
+  <defs>
+    <linearGradient id="gatewayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0ea5e9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="engineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feOffset dx="2" dy="2" result="offsetBlur" />
+      <feMerge>
+        <feMergeNode in="offsetBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="24" font-weight="bold">Real-time Chat Backend Architecture</text>
+
+  <!-- Client Layer -->
+  <rect x="50" y="100" width="120" height="300" rx="8" fill="#1e293b" stroke="#334155" stroke-width="2" filter="url(#shadow)" />
+  <text x="110" y="130" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="14" font-weight="bold">CLIENTS</text>
+  <rect x="70" y="160" width="80" height="40" rx="4" fill="#334155" />
+  <text x="110" y="185" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="12">Browser</text>
+  <rect x="70" y="220" width="80" height="40" rx="4" fill="#334155" />
+  <text x="110" y="245" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="12">Mobile</text>
+
+  <!-- WebSocket Gateway Layer -->
+  <rect x="250" y="100" width="200" height="200" rx="8" fill="url(#gatewayGrad)" filter="url(#shadow)" />
+  <text x="350" y="130" text-anchor="middle" fill="#082f49" font-family="sans-serif" font-size="16" font-weight="bold">WS GATEWAY</text>
+  <text x="350" y="155" text-anchor="middle" fill="#082f49" font-family="sans-serif" font-size="12">Internal Proxy (tcpClient)</text>
+  <rect x="270" y="180" width="160" height="80" rx="4" fill="#f0f9ff" fill-opacity="0.2" stroke="#0ea5e9" stroke-dasharray="4" />
+  <text x="350" y="210" text-anchor="middle" fill="#082f49" font-family="sans-serif" font-size="11">JSON Decoding</text>
+  <text x="350" y="235" text-anchor="middle" fill="#082f49" font-family="sans-serif" font-size="11">Protocol Framing</text>
+
+  <!-- TCP Engine Layer -->
+  <rect x="550" y="100" width="250" height="300" rx="8" fill="url(#engineGrad)" filter="url(#shadow)" />
+  <text x="675" y="130" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="16" font-weight="bold">TCP ENGINE (CORE)</text>
+  
+  <rect x="570" y="160" width="210" height="50" rx="4" fill="#eef2ff" fill-opacity="0.2" />
+  <text x="675" y="190" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="12" font-weight="bold">Room Manager (Fan-out)</text>
+  
+  <rect x="570" y="220" width="210" height="50" rx="4" fill="#eef2ff" fill-opacity="0.2" />
+  <text x="675" y="250" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="12" font-weight="bold">Connection Manager</text>
+
+  <rect x="570" y="280" width="210" height="100" rx="4" fill="#eef2ff" fill-opacity="0.2" stroke="#4338ca" stroke-dasharray="2" />
+  <text x="675" y="305" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="12" font-weight="bold">Worker Pool Interface</text>
+  <text x="675" y="330" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="11">Async DB Tasks</text>
+  <text x="675" y="350" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="11">(Insert/Update/Delete)</text>
+
+  <!-- Persistence Layer -->
+  <rect x="850" y="450" width="120" height="100" rx="8" fill="url(#dbGrad)" filter="url(#shadow)" />
+  <path d="M870 470 Q870 460 910 460 Q950 460 950 470 L950 520 Q950 530 910 530 Q870 530 870 520 Z" fill="#78350f" fill-opacity="0.2" stroke="#92400e" stroke-width="2" />
+  <text x="910" y="500" text-anchor="middle" fill="#78350f" font-family="sans-serif" font-size="14" font-weight="bold">PostgreSQL</text>
+
+  <!-- HTTP API Layer -->
+  <rect x="250" y="450" width="200" height="100" rx="8" fill="#1e293b" stroke="#334155" stroke-width="2" filter="url(#shadow)" />
+  <text x="350" y="480" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="16" font-weight="bold">HTTP REST API</text>
+  <text x="350" y="505" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="12">Auth / User / History</text>
+
+  <!-- Connections -->
+  <!-- Client <-> WS Gateway -->
+  <path d="M170 200 L250 200" stroke="#38bdf8" stroke-width="3" marker-end="url(#arrowBlue)" />
+  <text x="210" y="190" text-anchor="middle" fill="#38bdf8" font-family="sans-serif" font-size="10">WS / JSON</text>
+
+  <!-- WS Gateway <-> TCP Engine -->
+  <path d="M450 200 L550 200" stroke="#818cf8" stroke-width="3" marker-end="url(#arrowIndigo)" />
+  <text x="500" y="190" text-anchor="middle" fill="#818cf8" font-family="sans-serif" font-size="10">TCP / Binary</text>
+
+  <!-- TCP Engine -> Worker Pool -->
+  <path d="M750 400 L850 460" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowAmber)" stroke-dasharray="5,5" />
+  <text x="815" y="420" text-anchor="middle" fill="#f59e0b" font-family="sans-serif" font-size="10" transform="rotate(25, 815, 420)">Async Tasks</text>
+
+  <!-- HTTP API -> PostgreSQL -->
+  <path d="M450 500 L850 500" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowSlate)" />
+  <text x="650" y="490" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="10">SQL Queries</text>
+
+  <!-- Client -> HTTP API -->
+  <path d="M110 400 L110 500 L250 500" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrowSlate)" />
+  <text x="180" y="490" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="10">HTTP / JSON</text>
+
+  <!-- Markers -->
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orientation="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrowIndigo" markerWidth="10" markerHeight="10" refX="9" refY="3" orientation="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#818cf8" />
+    </marker>
+    <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="9" refY="3" orientation="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrowSlate" markerWidth="10" markerHeight="10" refX="9" refY="3" orientation="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+    </marker>
+  </defs>
+</svg>

@@ -40,6 +40,7 @@ type server struct {
 	c           *config.Config
 	signalToWs  chan signalToWsReq
 	mu          sync.Mutex
+	// idleList to identify the idle connections in the websocket server and disconnect them.
 	idleList    *list.List
 	maxIdleTime time.Duration
 	reaperCh    chan struct{}
