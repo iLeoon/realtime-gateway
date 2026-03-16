@@ -10,8 +10,8 @@ import (
 	"github.com/iLeoon/realtime-gateway/pkg/log"
 )
 
-func AuthGuard(next http.Handler, s Service) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func AuthGuard(next http.Handler, s Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("token")
 		if err != nil {
 			apiresponse.Send(w, http.StatusBadRequest, apierror.InvalidAuthParameters("cookie", "MissingAuthCookie"))
@@ -43,5 +43,5 @@ func AuthGuard(next http.Handler, s Service) http.Handler {
 
 		ctx := ctx.SetUserID(r.Context(), userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
 }

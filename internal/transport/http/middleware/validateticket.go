@@ -14,8 +14,8 @@ type Service interface {
 	DecodeToken(jwtToken string) (userID string, err error)
 }
 
-func ValidateWsTicket(next http.Handler, s Service) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func ValidateWsTicket(next http.Handler, s Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if the token is non-existent
 		jwtToken := r.URL.Query().Get("token")
 		if jwtToken == "" {
@@ -42,5 +42,5 @@ func ValidateWsTicket(next http.Handler, s Service) http.Handler {
 
 		ctx := ctx.SetUserID(r.Context(), userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
 }

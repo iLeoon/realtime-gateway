@@ -72,6 +72,7 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler, tcpServer Not
 	convMux := convHandler.RegisterRoutes()
 	frMux := frHandler.RegisterRoutes()
 	wsMux := wsHandler.RegsiterRoutes()
+
 	healthMux := healthHandler.RegisterRoutes()
 
 	rootMux.Handle("/auth/", middleware.RateLimiter(authMux, rl))
@@ -83,8 +84,12 @@ func Start(conf *config.Config, db *pgxpool.Pool, ws http.Handler, tcpServer Not
 	rootMux.Handle("/friendrequests/", middleware.AuthGuard(middleware.RateLimiter(frMux, rl), jwtService))
 	rootMux.Handle("/friendrequests", middleware.AuthGuard(middleware.RateLimiter(frMux, rl), jwtService))
 
+	// Generate a ws ticket to authenticate before establishing a ws connection
 	rootMux.Handle("/ws/", middleware.AuthGuard(wsMux, jwtService))
-	rootMux.Handle("/ws", middleware.ValidateWsTicket(ws, jwtService))
+
+	// Authenticate the ws connection through the ws ticket
+	rootMux.Handle("/ws", middleware.ValidateWsTicket(middleware.RateLimiter(ws, rl), jwtService))
+
 	rootMux.Handle("/health", healthMux)
 
 	// Custom http server configurations
