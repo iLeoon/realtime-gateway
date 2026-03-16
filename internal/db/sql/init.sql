@@ -12,7 +12,7 @@ COMMENT ON TYPE friends_type IS
 CREATE TABLE IF NOT EXISTS users (
 	user_id INT GENERATED ALWAYS AS IDENTITY,
 	username varchar(30) NOT NULL,
-	email varchar(30) NOT NULL UNIQUE,
+	email varchar(255) NOT NULL UNIQUE,
 	PRIMARY KEY (user_id)
 );
 
@@ -76,7 +76,7 @@ The creator is inserted here at conversation creation time alongside other membe
 CREATE TABLE IF NOT EXISTS friends(
 	sender_id INT,
 	recipient_id INT,
-	author_id INT
+	author_id INT,
 	status friends_type NOT NULL,
 	created_at TIMESTAMP DEFAULT NOW(),
 
@@ -104,5 +104,4 @@ CREATE TABLE IF NOT EXISTS providers(
 COMMENT ON TABLE providers IS
 'Store needed providers data';
 
-ALTER TABLE conversations 
-	ADD CONSTRAINT fk_last_message FOREIGN KEY (last_message_id) REFERENCES messages (message_id);
+
