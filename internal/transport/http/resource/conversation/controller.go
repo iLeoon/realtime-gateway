@@ -17,11 +17,11 @@ import (
 )
 
 type Service interface {
-	Create(ctx context.Context, creatorID string, body ConversationRequest) (c *ConversationCreatedResponse, a *apierror.APIError, statusCode int)
-	Find(ctx context.Context, conversationID string, userID string) (c *Conversation, a *apierror.APIError, statusCode int)
-	FindAll(ctx context.Context, conversationID string) (cl ConversationsList, a *apierror.APIError, statusCode int)
-	GetMembers(ctx context.Context, conversationID string, userID string) (pl ParticipantsList, a *apierror.APIError, statusCode int)
-	UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (pl ParticipantsList, a *apierror.APIError, statusCode int)
+	Create(ctx context.Context, creatorID string, body ConversationRequest) (*ConversationCreatedResponse, *apierror.APIError, int)
+	Find(ctx context.Context, conversationID string, userID string) (*Conversation, *apierror.APIError, int)
+	FindAll(ctx context.Context, conversationID string) (ConversationsList, *apierror.APIError, int)
+	GetMembers(ctx context.Context, conversationID string, userID string) (ParticipantsList, *apierror.APIError, int)
+	UpdateParticipants(ctx context.Context, conversationID string, requesterID string, body UpdateConversationRequest) (ParticipantsList, *apierror.APIError, int)
 }
 
 type MessageService interface {
