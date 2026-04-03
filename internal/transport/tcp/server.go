@@ -21,13 +21,20 @@ import (
 
 const path errors.PathName = "tcp/server"
 
+type DBConnection interface {
+	FetchMembers(userID uint32, ctx context.Context) ([]MemberShip, error)
+	FetchMsgAuthor(messageID uint32, userID uint32, ctx context.Context) error
+	FetchMsg(context.Context) (uint32, error)
+	GetPool() *pgxpool.Pool
+}
+
 // server represents the central processing engine of the system. It is
 // responsible for managing active WebSocket clients, receiving packets from
 // the gateway, applying server-side logic, and routing messages to the
 // appropriate clients.
 type server struct {
 	conf              *config.Config
-	db                *pgxpool.Pool
+	db                DBConnection
 	connections       map[uint32]net.Conn            // connectionID  → raw TCP conn
 	clients           map[uint32][]uint32            // userID        → []connectionID
 	userConversations map[uint32]map[uint32]struct{} // userID        → set of conversationIDs
@@ -51,11 +58,90 @@ type FanOut struct {
 	userID       uint32
 }
 
+type dbConn struct {
+	db *pgxpool.Pool
+}
+
+func (d *dbConn) GetPool() *pgxpool.Pool {
+	return d.db
+}
+
+// FetchMembers queries every conversation the user belongs to and all
+// members of those conversations in a single round-trip. Must be called
+// outside the mutex — it performs I/O.
+func (d *dbConn) FetchMembers(userID uint32, ctx context.Context) ([]MemberShip, error) {
+
+	const op errors.Op = "dbConn.FetchMembers"
+
+	rows, err := d.db.Query(ctx, `
+		SELECT uc1.conversation_id, uc2.user_id
+		FROM users_conversations uc1
+		JOIN users_conversations uc2 ON uc1.conversation_id = uc2.conversation_id
+		WHERE uc1.user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, errors.B(path, op, errors.Internal, err)
+	}
+	defer rows.Close()
+
+	var memberships []MemberShip
+	for rows.Next() {
+		var m MemberShip
+		if err := rows.Scan(&m.conversationID, &m.memberID); err != nil {
+			return nil, errors.B(path, op, errors.Internal, err)
+		}
+		memberships = append(memberships, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.B(path, op, errors.Internal, err)
+	}
+	return memberships, nil
+}
+
+// FetchMsgAuthor checks that messageID was authored by userID.
+// Returns a client error if the message doesn't exist or belongs to someone else.
+func (d *dbConn) FetchMsgAuthor(messageID uint32, userID uint32, ctx context.Context) error {
+	const op errors.Op = "dbConn.FetchMsgAuthor"
+
+	var authorID uint32
+	err := d.db.QueryRow(ctx,
+		`SELECT creator_id FROM messages WHERE message_id = $1`,
+		messageID,
+	).Scan(&authorID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.B(path, op, errors.Client, fmt.Errorf("messageID %v does not exist", messageID))
+		}
+		return errors.B(path, op, errors.Internal, fmt.Errorf("failed to verify message author: %w", err))
+	}
+	if authorID != userID {
+		return errors.B(path, op, errors.Client, fmt.Errorf("userID %v is not the author of messageID %v", userID, messageID))
+	}
+	return nil
+
+}
+
+// FetchMsg fecthes the next message_id from Postgres sequence before fan-out.
+// This is a lightweight counter read that lets us
+// include the real DB-assigned ID in the ResponseMessagePacket immediately.
+func (d *dbConn) FetchMsg(ctx context.Context) (uint32, error) {
+	const op errors.Op = "dbConn.FetchMsg"
+	var messageID uint32
+
+	err := d.db.QueryRow(ctx, `SELECT nextval(pg_get_serial_sequence('messages', 'message_id'))`).Scan(&messageID)
+	if err != nil {
+		return 0, errors.B(path, op, errors.Internal, fmt.Errorf("failed to pre-fetch message_id sequence: %w", err))
+	}
+
+	return messageID, nil
+}
+
 // NewServer creates a new tcp server instance
 func NewServer(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) *server {
 	server := &server{
 		conf:              c,
-		db:                db,
+		db:                &dbConn{db: db},
 		connections:       make(map[uint32]net.Conn),
 		clients:           make(map[uint32][]uint32),
 		userConversations: make(map[uint32]map[uint32]struct{}),
@@ -70,7 +156,7 @@ func NewServer(c *config.Config, db *pgxpool.Pool, ready chan<- struct{}) *serve
 
 // Start starts a new instance of the TCP server.
 func (s *server) Start() {
-	worker.New(s.done, s.messagesCh, s.db)
+	worker.New(s.done, s.messagesCh, s.db.GetPool())
 	s.listen()
 }
 
@@ -107,7 +193,9 @@ func (s *server) listen() {
 func (s *server) handleConn(conn net.Conn) {
 	const op errors.Op = "server.handleConn"
 	stopPing := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
+		cancel()
 		close(stopPing)
 		log.Info.Printf("%q: %q: tcp server terminated it's connection", path, op)
 		conn.Close()
@@ -134,17 +222,17 @@ func (s *server) handleConn(conn net.Conn) {
 		// packtDispatcher routes the frame to it's appropriate handler.
 		// uses a type assertion to convert the generic BuildPayload interface into
 		// its concrete *packet type
-		if !s.packetsDispatcher(frame, conn, &userID) {
+		if !s.packetsDispatcher(frame, conn, &userID, ctx) {
 			return
 		}
 	}
 }
 
-func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn, userID *uint32) bool {
+func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn, userID *uint32, ctx context.Context) bool {
 	switch p := frame.Payload.(type) {
 	case *packets.ConnectPacket:
 		*userID = p.UserID
-		err := s.register(p, conn)
+		err := s.register(p, conn, ctx)
 		if err != nil {
 			log.Error.Println("processing connect packet failed", err)
 			s.handleErrorPacket(err, conn)
@@ -156,7 +244,7 @@ func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn, userID 
 		return false // signal handleConn to exit and fire its defer
 
 	case *packets.SendMessagePacket:
-		err := s.handleSendMessageReq(p, *userID)
+		err := s.handleSendMessageReq(p, *userID, ctx)
 		if err != nil {
 			log.Error.Println("processing send message packet", err)
 			s.handleErrorPacket(err, conn)
@@ -165,14 +253,14 @@ func (s *server) packetsDispatcher(frame *protocol.Frame, conn net.Conn, userID 
 	case *packets.PongPacket:
 		// We don't do anything we just renter the loop.
 	case *packets.UpdateMessagePacket:
-		err := s.handleUpdateMessagePacket(p, *userID)
+		err := s.handleUpdateMessagePacket(p, *userID, ctx)
 		if err != nil {
 			log.Error.Println("processing update message packet failed", err)
 			s.handleErrorPacket(err, conn)
 			return true
 		}
 	case *packets.DeleteMessagePacket:
-		err := s.handleDeleteMessagePacket(p, *userID)
+		err := s.handleDeleteMessagePacket(p, *userID, ctx)
 		if err != nil {
 			log.Error.Println("processing update message packet failed", err)
 			s.handleErrorPacket(err, conn)
@@ -234,8 +322,10 @@ func (s *server) writePacket(pkt packets.BuildPayload, conn net.Conn) error {
 // handleSendMessage processes an inbound SendMessage packet
 // it fans-out the messages to all the participants in a single conversation
 // wether it was direct or group conversation.
-func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uint32) error {
+func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uint32, ctx context.Context) error {
 	const op errors.Op = "server.handleSendMessageReq"
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 
 	if userID == 0 {
 		return errors.B(path, op, errors.Client, "userID is nonexistent")
@@ -245,17 +335,9 @@ func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uin
 		return errors.B(path, op, errors.Client, fmt.Errorf("the userID %v is not allowed to send messages in conversationID %v", userID, pkt.ConversationID))
 	}
 
-	// Pre-fetch the next message_id from Postgres sequence before fan-out.
-	// This is a lightweight counter read that lets us
-	// include the real DB-assigned ID in the ResponseMessagePacket immediately.
-	var messageID uint32
-	{
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := s.db.QueryRow(ctx, `SELECT nextval(pg_get_serial_sequence('messages', 'message_id'))`).Scan(&messageID)
-		cancel()
-		if err != nil {
-			return errors.B(path, op, errors.Internal, fmt.Errorf("failed to pre-fetch message_id sequence: %w", err))
-		}
+	messageID, err := s.db.FetchMsg(ctx)
+	if err != nil {
+		return errors.B(path, op, errors.Internal, err)
 	}
 
 	s.mu.RLock()
@@ -302,8 +384,10 @@ func (s *server) handleSendMessageReq(pkt *packets.SendMessagePacket, userID uin
 }
 
 // handleUpdateMessagePacket is responsible for updating a message
-func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, userID uint32) error {
+func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, userID uint32, ctx context.Context) error {
 	const op errors.Op = "server.handleUpdateMessagePacket"
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 
 	if userID == 0 {
 		return errors.B(path, op, errors.Client, "userID is nonexistent")
@@ -311,7 +395,7 @@ func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, use
 	if allowed := s.isAllowed(userID, pkt.ConversationID); !allowed {
 		return errors.B(path, op, errors.Client, fmt.Errorf("the userID %v is not allowed to send messages in conversationID %v", userID, pkt.ConversationID))
 	}
-	if err := s.verifyMessageAuthor(pkt.MessageID, userID); err != nil {
+	if err := s.db.FetchMsgAuthor(pkt.MessageID, userID, ctx); err != nil {
 		return errors.B(path, op, err)
 	}
 
@@ -358,8 +442,10 @@ func (s *server) handleUpdateMessagePacket(pkt *packets.UpdateMessagePacket, use
 }
 
 // handleUpdateMessagePacket is responsible for deleting a message
-func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, userID uint32) error {
+func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, userID uint32, ctx context.Context) error {
 	const op errors.Op = "server.handleDeleteMessagePacket"
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 
 	if userID == 0 {
 		return errors.B(path, op, errors.Client, "userID is nonexistent")
@@ -367,7 +453,7 @@ func (s *server) handleDeleteMessagePacket(pkt *packets.DeleteMessagePacket, use
 	if allowed := s.isAllowed(userID, pkt.ConversationID); !allowed {
 		return errors.B(path, op, errors.Client, fmt.Errorf("the userID %v is not allowed to send messages in conversationID %v", userID, pkt.ConversationID))
 	}
-	if err := s.verifyMessageAuthor(pkt.MessageID, userID); err != nil {
+	if err := s.db.FetchMsgAuthor(pkt.MessageID, userID, ctx); err != nil {
 		return errors.B(path, op, err)
 	}
 
@@ -511,30 +597,6 @@ func (s *server) RemoveFromRoom(userID, conversationID uint32) error {
 	return nil
 }
 
-// verifyMessageAuthor checks that messageID was authored by userID.
-// Returns a client error if the message doesn't exist or belongs to someone else.
-func (s *server) verifyMessageAuthor(messageID uint32, userID uint32) error {
-	const op errors.Op = "server.verifyMessageAuthor"
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var authorID uint32
-	err := s.db.QueryRow(ctx,
-		`SELECT creator_id FROM messages WHERE message_id = $1`,
-		messageID,
-	).Scan(&authorID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.B(path, op, errors.Client, fmt.Errorf("messageID %v does not exist", messageID))
-		}
-		return errors.B(path, op, errors.Internal, fmt.Errorf("failed to verify message author: %w", err))
-	}
-	if authorID != userID {
-		return errors.B(path, op, errors.Client, fmt.Errorf("userID %v is not the author of messageID %v", userID, messageID))
-	}
-	return nil
-}
-
 func (s *server) pingReq(conn net.Conn, stop <-chan struct{}) {
 	const op errors.Op = "server.pingReq"
 	ticker := time.NewTicker(pingTime)
@@ -559,10 +621,12 @@ func (s *server) pingReq(conn net.Conn, stop <-chan struct{}) {
 }
 
 // registerConnectionIDs add a connecteionIDs and userIDs to their maps.
-func (s *server) register(pkt *packets.ConnectPacket, conn net.Conn) error {
+func (s *server) register(pkt *packets.ConnectPacket, conn net.Conn, ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	const op errors.Op = "server.register"
 
-	memberships, err := s.fetchMemberships(pkt.UserID)
+	memberships, err := s.db.FetchMembers(pkt.UserID, ctx)
 	if err != nil {
 		return errors.B(path, op, err)
 	}
@@ -706,39 +770,4 @@ func (s *server) handleErrorPacket(err error, conn net.Conn) {
 			log.Error.Println("failed to send 'error packet' alert to client:", errWrite)
 		}
 	}
-}
-
-// fetchMemberships queries every conversation the user belongs to and all
-// members of those conversations in a single round-trip. Must be called
-// outside the mutex — it performs I/O.
-func (s *server) fetchMemberships(userID uint32) ([]MemberShip, error) {
-	const op errors.Op = "server.fetchMemberships"
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	rows, err := s.db.Query(ctx, `
-		SELECT uc1.conversation_id, uc2.user_id
-		FROM users_conversations uc1
-		JOIN users_conversations uc2 ON uc1.conversation_id = uc2.conversation_id
-		WHERE uc1.user_id = $1`,
-		userID,
-	)
-	if err != nil {
-		return nil, errors.B(path, op, errors.Internal, err)
-	}
-	defer rows.Close()
-
-	var memberships []MemberShip
-	for rows.Next() {
-		var m MemberShip
-		if err := rows.Scan(&m.conversationID, &m.memberID); err != nil {
-			return nil, errors.B(path, op, errors.Internal, err)
-		}
-		memberships = append(memberships, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, errors.B(path, op, errors.Internal, err)
-	}
-	return memberships, nil
 }
