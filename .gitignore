@@ -4,3 +4,7 @@
 
 bin/
 web/
+
+*.test
+*.out
+*.prof
